@@ -74,12 +74,15 @@ class Settings(BaseModel):
     buyer_agent_port: int = Field(default=8003, ge=1024, le=65535)
     transport_agent_port: int = Field(default=8004, ge=1024, le=65535)
 
-    # Agentverse credentials (optional for local multi-agent network)
+    # Agentverse credentials & mailbox
     agentverse_api_key: str | None = Field(
         default=None, description="Agentverse API key"
     )
     agentverse_url: str = Field(
         default="https://agentverse.ai", description="Agentverse platform base URL"
+    )
+    use_mailbox: bool = Field(
+        default=True, description="Enable Agentverse mailbox connection"
     )
 
     # External APIs
@@ -131,12 +134,14 @@ class Settings(BaseModel):
             transport_agent_port=int(os.getenv("TRANSPORT_AGENT_PORT", "8004")),
             agentverse_api_key=os.getenv("AGENTVERSE_API_KEY") or None,
             agentverse_url=os.getenv("AGENTVERSE_URL", "https://agentverse.ai"),
+            use_mailbox=os.getenv("USE_MAILBOX", "true").lower() in ("true", "1", "yes"),
             datagov_api_key=os.getenv("DATAGOV_API_KEY") or None,
             open_meteo_base_url=os.getenv(
                 "OPEN_METEO_BASE_URL", "https://api.open-meteo.com/v1/forecast"
             ),
             database_path=os.getenv("DATABASE_PATH", "krishibazaar.db"),
         )
+
 
 
 # Global settings singleton
