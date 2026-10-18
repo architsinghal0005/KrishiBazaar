@@ -78,7 +78,7 @@ KrishiBazaar provides an autonomous negotiation network directly inside **ASI:On
 
 ## 3. Phased Implementation Milestones
 
-### Phase 1: Project Foundation & Architecture (Current)
+### Phase 1: Project Foundation & Architecture (Completed)
 - [x] Standard `src/krishibazaar` package layout with `agents/` and `services/`.
 - [x] Strict configuration management with Pydantic validation (`config.py`).
 - [x] Comprehensive domain models (`models.py`) with audit flags and disclaimers.
@@ -86,28 +86,33 @@ KrishiBazaar provides an autonomous negotiation network directly inside **ASI:On
 - [x] Safe `.gitignore` and `.env.example` preventing secret leaks.
 - [x] Standard `pyproject.toml` and test suite.
 
-### Phase 2: Deterministic Net-Return Optimizer
+### Phase 2: Minimal KrishiBazaar Orchestrator (Completed)
+- [x] Core Orchestrator agent (`src/krishibazaar/agents/orchestrator.py` & `agents/orchestrator.py`).
+- [x] Official Fetch.ai `AgentChatProtocol` v0.3.0 implementation (`chat_protocol_spec`).
+- [x] Two-way messaging: `ChatMessage`, `ChatAcknowledgement`, and `EndSessionContent`.
+- [x] Safe content extraction and secret-safe logging.
+- [x] Agentverse mailbox connection and Almanac registration.
+
+### Phase 3: Structured Intent Extraction using ASI:One (Completed)
+- [x] ASI:One Developer API client (`https://api.asi1.ai/v1/chat/completions`) using `asi1-mini`.
+- [x] Strict validation with `FarmerIntent` domain model (crop, quantity, origin, deadline, minimum net return, storage).
+- [x] Targeted follow-up question generator for missing required fields (no guessing/inventing).
+- [x] Resilient deterministic rule-based fallback when API credentials absent or on network errors.
+- [x] Mocked pytest test suite (`tests/test_extraction.py`) and manual verification script (`smoke_test_asi1.py`).
+- [x] Orchestrator integration: parses farmer queries and clarifies missing parameters.
+
+### Phase 4: Deterministic Net-Return Optimizer
 - [ ] Implement `services/optimizer.py` with pure, deterministic financial logic.
 - [ ] Account for APMC cess (typically 1-2%), loading/unloading (hamali), vehicle freight, and weather spoilage risk buffers.
 - [ ] Implement transparent ranking logic (Mandi vs Direct Buyers).
 - [ ] Comprehensive unit tests with zero-tolerance for floating-point inaccuracies.
 
-### Phase 3: External API Services (Market & Weather)
+### Phase 5: External API Services (Market & Weather)
 - [ ] `services/market.py`: Official Agmarknet / data.gov.in client with verified benchmark fallback cache.
 - [ ] Explicit provenance metadata tagging (`data.gov.in_live` vs `official_benchmark_cache`).
 - [ ] `services/weather.py`: Open-Meteo client assessing precipitation probability and transit rain hazard.
 - [ ] Network failure handling, timeouts, and fallback resilience.
 
-### Phase 4: Specialist Sub-Agents (Market, Weather, Buyer, Transport)
-- [ ] `agents/market_agent.py`: uAgent serving mandi price inquiries.
-- [ ] `agents/weather_agent.py`: uAgent serving transit hazard evaluations.
-- [ ] `agents/buyer_agent.py`: uAgent returning structured institutional buyer bids with explicit benchmark disclaimers.
-- [ ] `agents/transport_agent.py`: uAgent returning freight quotes and managing booking creation.
-- [ ] Typed inter-agent communication protocols.
-
-### Phase 5: KrishiBazaar Orchestrator & ASI:One Chat Protocol (ACP)
-- [ ] `agents/orchestrator.py`: Native ASI:One agent implementing `AgentChatProtocol` (`chat_protocol_spec`).
-- [ ] Natural language parsing of crop, quantity, and location.
 - [ ] Multi-agent coordination and financial ranking synthesis.
 - [ ] ASI:One Interactive Card payloads & structured markdown presentation.
 - [ ] Strict farmer approval gate: requires explicit confirmation before executing booking.

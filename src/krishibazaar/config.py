@@ -94,6 +94,25 @@ class Settings(BaseModel):
         description="Open-Meteo REST endpoint",
     )
 
+    # ASI:One Developer API
+    asi_one_api_key: str | None = Field(
+        default=None, description="ASI:One Developer API key"
+    )
+    asi_one_base_url: str = Field(
+        default="https://api.asi1.ai/v1",
+        description="ASI:One OpenAI-compatible base URL",
+    )
+    asi_one_model: str = Field(
+        default="asi1-mini",
+        description="ASI:One model name for intent extraction",
+    )
+    asi_one_timeout_seconds: float = Field(
+        default=15.0,
+        ge=1.0,
+        le=120.0,
+        description="HTTP request timeout for ASI:One API in seconds",
+    )
+
     # SQLite database file path
     database_path: str = Field(
         default="krishibazaar.db", description="Local SQLite database file"
@@ -139,8 +158,13 @@ class Settings(BaseModel):
             open_meteo_base_url=os.getenv(
                 "OPEN_METEO_BASE_URL", "https://api.open-meteo.com/v1/forecast"
             ),
+            asi_one_api_key=os.getenv("ASI_ONE_API_KEY") or None,
+            asi_one_base_url=os.getenv("ASI_ONE_BASE_URL", "https://api.asi1.ai/v1"),
+            asi_one_model=os.getenv("ASI_ONE_MODEL", "asi1-mini"),
+            asi_one_timeout_seconds=float(os.getenv("ASI_ONE_TIMEOUT_SECONDS", "15.0")),
             database_path=os.getenv("DATABASE_PATH", "krishibazaar.db"),
         )
+
 
 
 

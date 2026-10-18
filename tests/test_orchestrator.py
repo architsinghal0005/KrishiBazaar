@@ -39,12 +39,12 @@ def test_orchestrator_initialization_and_protocol():
 
 
 def test_build_greeting_response():
-    """Verify greeting text contains brand and tool status explanation."""
+    """Verify greeting text contains brand and how to start instruction."""
     greeting = build_greeting_response("Hello KrishiBazaar")
     assert "KrishiBazaar" in greeting
     assert "कृषिबाज़ार" in greeting
-    assert "not connected yet" in greeting
-    assert "Phase 2" in greeting
+    assert "50 quintals of onions" in greeting
+
 
 
 @pytest.mark.asyncio

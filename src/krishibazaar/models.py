@@ -35,6 +35,105 @@ class FarmerInquiry(BaseModel):
         return v.strip().title()
 
 
+class FarmerIntent(BaseModel):
+    """
+    Validated structured intent extracted from farmer's natural language.
+    Includes completeness check and targeted follow-up questions for missing required fields.
+    """
+
+    crop: str | None = Field(default=None, description="Crop name (e.g. onion, wheat, tomato)")
+    quantity_quintals: float | None = Field(
+        default=None, gt=0, description="Harvest quantity in quintals"
+    )
+    origin_location: str | None = Field(
+        default=None, description="Farmer village, mandi area, or district"
+    )
+    selling_deadline: str | None = Field(
+        default=None, description="Preferred selling timeframe (e.g. tomorrow, 3 days)"
+    )
+    minimum_net_return_inr: float | None = Field(
+        default=None, ge=0, description="Minimum acceptable net payout in INR"
+    )
+    storage_preference: str | None = Field(
+        default=None, description="Optional storage preference (e.g. cold storage, dry shed)"
+    )
+    is_complete: bool = Field(
+        default=False, description="True if all mandatory fields (crop, quantity, origin) are present"
+    )
+    missing_fields: list[str] = Field(
+        default_factory=list, description="List of missing required fields"
+    )
+    follow_up_question: str | None = Field(
+        default=None, description="Clarifying question for the farmer if info is missing"
+    )
+    extraction_source: str = Field(
+        default="asi1", description="Extraction mechanism (asi1, rule_based_fallback)"
+    )
+
+    @field_validator("crop")
+    @classmethod
+    def clean_crop(cls, v: str | None) -> str | None:
+        if v and isinstance(v, str):
+            cleaned = v.strip().lower()
+            return cleaned if cleaned not in ("null", "none", "") else None
+        return None
+
+    @field_validator("origin_location")
+    @classmethod
+    def clean_origin(cls, v: str | None) -> str | None:
+        if v and isinstance(v, str):
+            cleaned = v.strip().title()
+            return cleaned if cleaned.lower() not in ("null", "none", "") else None
+        return None
+
+    def evaluate_completeness(self) -> FarmerIntent:
+        """Evaluate missing fields and generate a farmer-friendly follow-up question."""
+        missing = []
+        if not self.crop:
+            missing.append("crop")
+        if self.quantity_quintals is None or self.quantity_quintals <= 0:
+            missing.append("quantity_quintals")
+        if not self.origin_location:
+            missing.append("origin_location")
+
+        self.missing_fields = missing
+        self.is_complete = len(missing) == 0
+
+        if not self.is_complete:
+            if "crop" in missing and "quantity_quintals" in missing and "origin_location" in missing:
+                self.follow_up_question = (
+                    "Namaste! Could you please tell me which crop you want to sell, "
+                    "the approximate quantity in quintals, and your village or district?"
+                )
+            elif "crop" in missing:
+                self.follow_up_question = (
+                    "Which agricultural crop or produce are you selling (e.g. Onion, Wheat, Tomato, Soybean)?"
+                )
+            elif "quantity_quintals" in missing and "origin_location" in missing:
+                self.follow_up_question = (
+                    f"Got it for {self.crop.title()}! How many quintals do you have to sell, "
+                    "and what is your farm location (district or village)?"
+                )
+            elif "quantity_quintals" in missing:
+                self.follow_up_question = (
+                    f"How many quintals of {self.crop.title()} are you looking to sell? "
+                    "(1 quintal = 100 kg)"
+                )
+            elif "origin_location" in missing:
+                self.follow_up_question = (
+                    f"Where is your farm located (district or village) to check nearby mandis and freight options?"
+                )
+            else:
+                missing_str = ", ".join(missing).replace("_", " ")
+                self.follow_up_question = (
+                    f"Could you please clarify the following detail(s): {missing_str}?"
+                )
+        else:
+            self.follow_up_question = None
+
+        return self
+
+
 class MandiPriceRecord(BaseModel):
     """Mandi price evidence record with provenance metadata."""
 

@@ -161,3 +161,29 @@ def test_booking_models_and_approval():
     )
     assert record.is_simulated_booking is True
     assert record.status == "CONFIRMED"
+
+
+def test_farmer_intent_model_validation_and_followup():
+    from krishibazaar.models import FarmerIntent
+
+    # Complete intent
+    intent = FarmerIntent(
+        crop="Onion",
+        quantity_quintals=50.0,
+        origin_location="Nashik",
+        minimum_net_return_inr=85000.0,
+    ).evaluate_completeness()
+    assert intent.crop == "onion"
+    assert intent.quantity_quintals == 50.0
+    assert intent.origin_location == "Nashik"
+    assert intent.is_complete is True
+    assert intent.follow_up_question is None
+
+    # Incomplete intent: missing location and quantity
+    partial = FarmerIntent(crop="Tomato").evaluate_completeness()
+    assert partial.is_complete is False
+    assert "quantity_quintals" in partial.missing_fields
+    assert "origin_location" in partial.missing_fields
+    assert partial.follow_up_question is not None
+    assert "Tomato" in partial.follow_up_question
+
