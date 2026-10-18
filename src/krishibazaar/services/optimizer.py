@@ -171,6 +171,14 @@ def optimize_sales_channels(
 
     # 1. Evaluate Mandi Options
     for idx, mandi in enumerate(mandi_records, start=1):
+        if getattr(mandi, "is_suspicious", False):
+            logger.warning(
+                f"Skipping suspicious mandi price record for '{mandi.mandi_name}' "
+                f"(modal price: INR {mandi.modal_price}): {mandi.suspicion_reason}"
+            )
+
+            continue
+
         scenario_id = f"MANDI-{idx:02d}"
         dest_name = mandi.mandi_name
         price = mandi.modal_price

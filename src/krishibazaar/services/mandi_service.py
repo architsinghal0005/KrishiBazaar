@@ -6,8 +6,11 @@ Provides transparent data provenance, live API queries, and curated benchmark fa
 """
 
 from __future__ import annotations
-import logging
+import asyncio
 from datetime import datetime, timezone
+import json
+import logging
+import subprocess
 from typing import Any
 import httpx
 
@@ -345,19 +348,147 @@ def _get_benchmark_fallback(
     )
 
 
+# Standard browser/curl-compatible request headers to prevent WAF / gateway timeouts
+DATAGOV_REQUEST_HEADERS: dict[str, str] = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Connection": "keep-alive",
+}
+
+
+def normalize_arrival_date(raw_date: str | None) -> str:
+    """Normalize date format (converts DD/MM/YYYY to YYYY-MM-DD or preserves ISO)."""
+    if not raw_date:
+        return datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    cleaned = str(raw_date).strip()
+    if "/" in cleaned:
+        parts = cleaned.split("/")
+        if len(parts) == 3 and len(parts[2]) == 4:
+            return f"{parts[2]}-{parts[1].zfill(2)}-{parts[0].zfill(2)}"
+    return cleaned
+
+
+def validate_mandi_price(
+    commodity: str,
+    modal_price: float,
+    min_price: float,
+    max_price: float,
+    reported_commodity: str | None = None,
+) -> tuple[bool, str | None]:
+    """
+    Validate commodity price for sanity, unit mismatch, or clerical entry errors.
+    Flags modal prices < ₹100/quintal as suspicious (such as ₹13 or ₹15 per quintal,
+    which in APMCs are clerical errors, unit mismatch for bundle/bunch, or per-kg typos).
+    Returns (is_suspicious: bool, suspicion_reason: str | None).
+    """
+    if modal_price <= 0 or min_price <= 0 or max_price <= 0:
+        return True, f"Non-positive price reported (min: INR {min_price}, max: INR {max_price}, modal: INR {modal_price})."
+
+    if min_price > max_price:
+        return True, f"Inverted price range: min_price (INR {min_price}) > max_price (INR {max_price})."
+
+    if modal_price < 100.0:
+        return (
+            True,
+            f"Suspiciously low modal price (INR {modal_price:.2f}/quintal). "
+            f"Likely recorded per kg or per bundle instead of per quintal, or data-entry clerical typo.",
+        )
+
+    if modal_price < min_price or modal_price > max_price:
+        return (
+            True,
+            f"Modal price (INR {modal_price:.2f}) outside [min_price: INR {min_price:.2f}, max_price: INR {max_price:.2f}] bounds.",
+        )
+
+    return False, None
+
+
+def _fetch_via_curl_subprocess(params: dict[str, Any], timeout_secs: int = 25) -> dict[str, Any] | None:
+    """Subprocess curl fallback for Windows environments where Python socket TLS might be blocked."""
+    try:
+        args = [
+            "curl.exe", "-sS", "-G",
+            "--connect-timeout", "10",
+            "--max-time", str(timeout_secs),
+            "-w", "\nHTTP_STATUS:%{http_code}",
+        ]
+        for k, v in params.items():
+            args.extend(["--data-urlencode", f"{k}={v}"])
+        args.append(DATAGOV_MANDI_RESOURCE_URL)
+        res = subprocess.run(args, capture_output=True, text=True, timeout=timeout_secs + 5)
+        body, _, status = res.stdout.rpartition("\nHTTP_STATUS:")
+        if status.strip() == "200" and body:
+            return json.loads(body)
+    except Exception as e:
+        logger.debug(f"curl.exe subprocess fallback failed: {e}")
+    return None
+
+
+def _parse_live_records(
+    raw_records: list[dict[str, Any]],
+    commodity: str,
+    district: str | None,
+    state: str | None,
+) -> list[MandiPriceRecord]:
+    """Parse and validate raw records returned by official data.gov.in AGMARKNET API."""
+    records: list[MandiPriceRecord] = []
+    for r in raw_records:
+        try:
+            m_name = str(r.get("market") or "APMC Mandi").strip()
+            dist = str(r.get("district") or district or "General").strip()
+            st = str(r.get("state") or state or "India").strip()
+            comm = str(r.get("commodity") or commodity).strip()
+            var = str(r.get("variety") or "General").strip()
+            arr_date = normalize_arrival_date(r.get("arrival_date"))
+            min_p = float(r.get("min_price", 0.0))
+            max_p = float(r.get("max_price", 0.0))
+            modal_p = float(r.get("modal_price", 0.0))
+
+            is_susp, susp_reason = validate_mandi_price(
+                commodity=commodity,
+                modal_price=modal_p,
+                min_price=min_p,
+                max_price=max_p,
+                reported_commodity=comm,
+            )
+
+            rec = MandiPriceRecord(
+                mandi_name=m_name,
+                district=dist,
+                state=st,
+                commodity=comm,
+                variety=var,
+                arrival_date=arr_date,
+                min_price=min_p,
+                max_price=max_p,
+                modal_price=modal_p,
+                data_source="data.gov.in_live",
+                source_disclaimer="Official live daily market price report from data.gov.in / AGMARKNET.",
+                is_suspicious=is_susp,
+                suspicion_reason=susp_reason,
+            )
+            records.append(rec)
+        except Exception as parse_err:
+            logger.debug(f"Skipping malformed mandi record: {parse_err}")
+    return records
+
+
 async def get_mandi_prices_async(
     commodity: str,
     district: str | None = None,
     state: str | None = None,
     api_key: str | None = None,
     client: httpx.AsyncClient | None = None,
+    allow_sample_fallback_on_error: bool = False,
 ) -> MandiPriceResult:
     """
     Retrieve mandi price records for a commodity.
     Queries the official data.gov.in AGMARKNET API if an API key is present;
     otherwise gracefully returns transparently labeled benchmark records.
+    When live API returns 0 records, reports zero live records found without substituting sample data.
     """
-    effective_key = api_key or settings.datagov_api_key
+    effective_key = api_key if api_key is not None else settings.datagov_api_key
 
     # If no API key configured, use transparent benchmark records
     if not effective_key:
@@ -366,7 +497,6 @@ async def get_mandi_prices_async(
         )
         return _get_benchmark_fallback(commodity, district, state)
 
-    # Construct request parameters according to official data.gov.in AGMARKNET spec
     params: dict[str, Any] = {
         "api-key": effective_key,
         "format": "json",
@@ -374,77 +504,103 @@ async def get_mandi_prices_async(
         "filters[commodity]": commodity.title(),
     }
     if state:
-        params["filters[state]"] = state.title()
+        params["filters[state.keyword]"] = state.title()
     if district:
         params["filters[district]"] = district.title()
 
     now_utc = datetime.now(timezone.utc).isoformat()
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    data: dict[str, Any] | None = None
+    http_error_msg: str | None = None
 
     try:
         if client:
-            resp = await client.get(DATAGOV_MANDI_RESOURCE_URL, params=params, timeout=12.0)
-        else:
-            async with httpx.AsyncClient() as session:
-                resp = await session.get(DATAGOV_MANDI_RESOURCE_URL, params=params, timeout=12.0)
-
-        if resp.status_code == 200:
-            data = resp.json()
-            raw_records = data.get("records", [])
-
-            if raw_records:
-                records = []
-                for r in raw_records:
-                    try:
-                        rec = MandiPriceRecord(
-                            mandi_name=r.get("market", "APMC Mandi"),
-                            district=r.get("district", district or "General"),
-                            state=r.get("state", state or "India"),
-                            commodity=r.get("commodity", commodity),
-                            variety=r.get("variety", "General"),
-                            arrival_date=r.get("arrival_date", datetime.now(timezone.utc).strftime("%Y-%m-%d")),
-                            min_price=float(r.get("min_price", 0.0)),
-                            max_price=float(r.get("max_price", 0.0)),
-                            modal_price=float(r.get("modal_price", 0.0)),
-                            data_source="data.gov.in_live",
-                            source_disclaimer="Official live daily market price report from data.gov.in / AGMARKNET.",
-                        )
-                        records.append(rec)
-                    except Exception as parse_err:
-                        logger.debug(f"Skipping malformed mandi record: {parse_err}")
-
-                if records:
-                    latest_date = records[0].arrival_date
-                    return MandiPriceResult(
-                        success=True,
-                        commodity=commodity,
-                        records=records,
-                        provenance=DataProvenance(
-                            source="data.gov.in (AGMARKNET Daily Mandi Prices)",
-                            retrieval_timestamp_utc=now_utc,
-                            observation_date=latest_date,
-                            freshness_status="LIVE",
-                            is_live=True,
-                            disclaimer="Official live daily wholesale mandi price dataset from data.gov.in.",
-                        ),
-                    )
-
-            logger.warning(
-                f"data.gov.in returned 0 records for commodity '{commodity}'. Falling back to benchmark cache."
+            resp = await client.get(
+                DATAGOV_MANDI_RESOURCE_URL,
+                params=params,
+                headers=DATAGOV_REQUEST_HEADERS,
+                timeout=15.0,
             )
-            return _get_benchmark_fallback(commodity, district, state)
-
+            if resp.status_code == 200:
+                data = resp.json()
+            else:
+                http_error_msg = f"HTTP {resp.status_code}: {resp.text[:120]}"
         else:
-            logger.error(
-                f"data.gov.in API returned HTTP {resp.status_code}: {resp.text[:120]}. Falling back to benchmark."
-            )
-            return _get_benchmark_fallback(commodity, district, state)
+            async with httpx.AsyncClient(headers=DATAGOV_REQUEST_HEADERS, timeout=15.0) as session:
+                resp = await session.get(DATAGOV_MANDI_RESOURCE_URL, params=params)
+                if resp.status_code == 200:
+                    data = resp.json()
+                else:
+                    http_error_msg = f"HTTP {resp.status_code}: {resp.text[:120]}"
 
-    except httpx.TimeoutException:
-        logger.warning("data.gov.in API request timed out. Utilizing benchmark records.")
-        return _get_benchmark_fallback(commodity, district, state)
+    except (httpx.TimeoutException, httpx.ConnectError) as transport_err:
+        logger.warning(f"httpx connection/timeout to data.gov.in: {transport_err}. Attempting curl fallback...")
+        if client is None:
+            data = await asyncio.to_thread(_fetch_via_curl_subprocess, params)
+        if data is None:
+            http_error_msg = f"Transport timeout: {str(transport_err)}"
     except Exception as ex:
-        logger.error(f"Error connecting to data.gov.in: {type(ex).__name__} - {str(ex)}")
+        logger.error(f"Error querying data.gov.in: {type(ex).__name__} - {str(ex)}")
+        http_error_msg = f"{type(ex).__name__}: {str(ex)}"
+
+    if data is not None:
+        raw_records = data.get("records", [])
+
+        if not raw_records:
+            loc_desc = f"district '{district}'" if district else "all reported mandis"
+            if state:
+                loc_desc += f", {state}"
+            return MandiPriceResult(
+                success=True,
+                commodity=commodity,
+                records=[],
+                error_message=f"No live mandi price records found on data.gov.in for '{commodity}' in {loc_desc} today.",
+                provenance=DataProvenance(
+                    source="data.gov.in (AGMARKNET Daily Mandi Prices)",
+                    retrieval_timestamp_utc=now_utc,
+                    observation_date=today_str,
+                    freshness_status="LIVE_NO_RECORDS",
+                    is_live=True,
+                    disclaimer="Official data.gov.in AGMARKNET query succeeded. 0 matching arrival records reported today.",
+                ),
+            )
+
+        records = _parse_live_records(raw_records, commodity, district, state)
+        obs_date = records[0].arrival_date if records else today_str
+        return MandiPriceResult(
+            success=True,
+            commodity=commodity,
+            records=records,
+            provenance=DataProvenance(
+                source="data.gov.in (AGMARKNET Daily Mandi Prices)",
+                retrieval_timestamp_utc=now_utc,
+                observation_date=obs_date,
+                freshness_status="LIVE",
+                is_live=True,
+                disclaimer="Official live daily wholesale mandi price dataset from data.gov.in.",
+            ),
+        )
+
+    logger.error(f"Live mandi API failed: {http_error_msg}")
+    if allow_sample_fallback_on_error:
+        logger.info("Serving sample benchmark fallback per fallback policy.")
         return _get_benchmark_fallback(commodity, district, state)
+
+    return MandiPriceResult(
+        success=False,
+        commodity=commodity,
+        records=[],
+        error_message=f"External data.gov.in API request failed: {http_error_msg}",
+        provenance=DataProvenance(
+            source="data.gov.in (AGMARKNET Daily Mandi Prices)",
+            retrieval_timestamp_utc=now_utc,
+            observation_date=today_str,
+            freshness_status="STALE",
+            is_live=False,
+            disclaimer="Live API request failed. No data retrieved.",
+        ),
+    )
 
 
 def get_mandi_prices(
@@ -452,9 +608,10 @@ def get_mandi_prices(
     district: str | None = None,
     state: str | None = None,
     api_key: str | None = None,
+    allow_sample_fallback_on_error: bool = False,
 ) -> MandiPriceResult:
     """Synchronous wrapper for Mandi price retrieval."""
-    effective_key = api_key or settings.datagov_api_key
+    effective_key = api_key if api_key is not None else settings.datagov_api_key
 
     if not effective_key:
         return _get_benchmark_fallback(commodity, district, state)
@@ -466,54 +623,83 @@ def get_mandi_prices(
         "filters[commodity]": commodity.title(),
     }
     if state:
-        params["filters[state]"] = state.title()
+        params["filters[state.keyword]"] = state.title()
     if district:
         params["filters[district]"] = district.title()
 
     now_utc = datetime.now(timezone.utc).isoformat()
+    today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    data: dict[str, Any] | None = None
+    http_error_msg: str | None = None
 
     try:
-        with httpx.Client() as client:
-            resp = client.get(DATAGOV_MANDI_RESOURCE_URL, params=params, timeout=12.0)
+        with httpx.Client(headers=DATAGOV_REQUEST_HEADERS, timeout=15.0) as client:
+            resp = client.get(DATAGOV_MANDI_RESOURCE_URL, params=params)
+            if resp.status_code == 200:
+                data = resp.json()
+            else:
+                http_error_msg = f"HTTP {resp.status_code}: {resp.text[:120]}"
+    except (httpx.TimeoutException, httpx.ConnectError) as transport_err:
+        logger.warning(f"httpx connection/timeout: {transport_err}. Attempting curl fallback...")
+        data = _fetch_via_curl_subprocess(params)
+        if data is None:
+            http_error_msg = f"Transport timeout: {str(transport_err)}"
+    except Exception as ex:
+        http_error_msg = f"{type(ex).__name__}: {str(ex)}"
 
-        if resp.status_code == 200:
-            data = resp.json()
-            raw_records = data.get("records", [])
-            records = []
-            for r in raw_records:
-                try:
-                    records.append(
-                        MandiPriceRecord(
-                            mandi_name=r.get("market", "APMC Mandi"),
-                            district=r.get("district", district or "General"),
-                            state=r.get("state", state or "India"),
-                            commodity=r.get("commodity", commodity),
-                            variety=r.get("variety", "General"),
-                            arrival_date=r.get("arrival_date", datetime.now(timezone.utc).strftime("%Y-%m-%d")),
-                            min_price=float(r.get("min_price", 0.0)),
-                            max_price=float(r.get("max_price", 0.0)),
-                            modal_price=float(r.get("modal_price", 0.0)),
-                            data_source="data.gov.in_live",
-                            source_disclaimer="Official live daily market price report from data.gov.in / AGMARKNET.",
-                        )
-                    )
-                except Exception:
-                    pass
+    if data is not None:
+        raw_records = data.get("records", [])
+        if not raw_records:
+            loc_desc = f"district '{district}'" if district else "all reported mandis"
+            if state:
+                loc_desc += f", {state}"
+            return MandiPriceResult(
+                success=True,
+                commodity=commodity,
+                records=[],
+                error_message=f"No live mandi price records found on data.gov.in for '{commodity}' in {loc_desc} today.",
+                provenance=DataProvenance(
+                    source="data.gov.in (AGMARKNET Daily Mandi Prices)",
+                    retrieval_timestamp_utc=now_utc,
+                    observation_date=today_str,
+                    freshness_status="LIVE_NO_RECORDS",
+                    is_live=True,
+                    disclaimer="Official data.gov.in AGMARKNET query succeeded. 0 matching arrival records reported today.",
+                ),
+            )
 
-            if records:
-                return MandiPriceResult(
-                    success=True,
-                    commodity=commodity,
-                    records=records,
-                    provenance=DataProvenance(
-                        source="data.gov.in (AGMARKNET Daily Mandi Prices)",
-                        retrieval_timestamp_utc=now_utc,
-                        observation_date=records[0].arrival_date,
-                        freshness_status="LIVE",
-                        is_live=True,
-                        disclaimer="Official live daily wholesale mandi price dataset from data.gov.in.",
-                    ),
-                )
+        records = _parse_live_records(raw_records, commodity, district, state)
+        obs_date = records[0].arrival_date if records else today_str
+        return MandiPriceResult(
+            success=True,
+            commodity=commodity,
+            records=records,
+            provenance=DataProvenance(
+                source="data.gov.in (AGMARKNET Daily Mandi Prices)",
+                retrieval_timestamp_utc=now_utc,
+                observation_date=obs_date,
+                freshness_status="LIVE",
+                is_live=True,
+                disclaimer="Official live daily wholesale mandi price dataset from data.gov.in.",
+            ),
+        )
+
+    if allow_sample_fallback_on_error:
         return _get_benchmark_fallback(commodity, district, state)
-    except Exception:
-        return _get_benchmark_fallback(commodity, district, state)
+
+    return MandiPriceResult(
+        success=False,
+        commodity=commodity,
+        records=[],
+        error_message=f"External data.gov.in API request failed: {http_error_msg}",
+        provenance=DataProvenance(
+            source="data.gov.in (AGMARKNET Daily Mandi Prices)",
+            retrieval_timestamp_utc=now_utc,
+            observation_date=today_str,
+            freshness_status="STALE",
+            is_live=False,
+            disclaimer="Live API request failed. No data retrieved.",
+        ),
+    )
+

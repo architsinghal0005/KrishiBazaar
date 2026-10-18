@@ -250,3 +250,48 @@ def test_optimize_sales_channels_shortfall_when_no_feasible_options():
     assert result.recommended_option.meets_minimum_condition is False
     assert "None of the" in result.summary_explanation
     assert "shortfall" in result.summary_explanation
+
+
+def test_optimize_sales_channels_excludes_suspicious_mandi_prices():
+    """Verify that anomalous / unit-mismatched prices (e.g. INR 13 or INR 15) are excluded from recommendation."""
+    mandi_records = [
+        MandiPriceRecord(
+            mandi_name="Pune(Moshi)",
+            district="Pune",
+            state="Maharashtra",
+            commodity="Onion Green",
+            arrival_date="2026-10-18",
+            min_price=15.0,
+            max_price=15.0,
+            modal_price=15.0,  # Suspicious unit error: INR 15 per bundle
+            data_source="data.gov.in_live",
+            is_suspicious=True,
+            suspicion_reason="Suspiciously low modal price (INR 15.00/quintal). Likely recorded per kg or bundle.",
+        ),
+        MandiPriceRecord(
+            mandi_name="APMC Newasa",
+            district="Ahilyanagar",
+            state="Maharashtra",
+            commodity="Onion",
+            arrival_date="2026-10-18",
+            min_price=1500.0,
+            max_price=4300.0,
+            modal_price=3500.0,  # Valid authentic price
+            data_source="data.gov.in_live",
+            is_suspicious=False,
+        ),
+    ]
+
+    result = optimize_sales_channels(
+        crop="Onion",
+        quantity_quintals=50.0,
+        mandi_records=mandi_records,
+        minimum_net_return_inr=80000.0,
+    )
+
+    # The suspicious record at INR 15 must be excluded
+    mandi_dest_names = [opt.destination_name for opt in result.all_options]
+    assert "Pune(Moshi)" not in mandi_dest_names
+    assert "APMC Newasa" in mandi_dest_names
+    assert result.recommended_option.destination_name == "APMC Newasa"
+

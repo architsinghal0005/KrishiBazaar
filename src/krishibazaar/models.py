@@ -142,7 +142,7 @@ class MandiPriceRecord(BaseModel):
     state: str = Field(..., description="Mandi state")
     commodity: str = Field(..., description="Commodity name")
     variety: str = Field(default="General", description="Commodity variety/grade")
-    arrival_date: str = Field(..., description="Date of price reporting (YYYY-MM-DD)")
+    arrival_date: str = Field(..., description="Date of price reporting (YYYY-MM-DD or DD/MM/YYYY)")
     min_price: float = Field(..., ge=0, description="Minimum price in INR per quintal")
     max_price: float = Field(..., ge=0, description="Maximum price in INR per quintal")
     modal_price: float = Field(..., ge=0, description="Modal (most frequent) price in INR per quintal")
@@ -152,6 +152,14 @@ class MandiPriceRecord(BaseModel):
     source_disclaimer: str = Field(
         default="Official mandi pricing report.",
         description="Transparency disclaimer",
+    )
+    is_suspicious: bool = Field(
+        default=False,
+        description="True if price is anomalous, unit mismatch, or clerical entry error",
+    )
+    suspicion_reason: str | None = Field(
+        default=None,
+        description="Explanation if price record was flagged as suspicious",
     )
 
 
@@ -228,7 +236,7 @@ class DataProvenance(BaseModel):
     source: str = Field(..., description="Data provider or dataset name")
     retrieval_timestamp_utc: str = Field(..., description="ISO 8601 UTC timestamp of retrieval")
     observation_date: str = Field(..., description="Date of observation or forecast (YYYY-MM-DD)")
-    freshness_status: Literal["LIVE", "RECENT", "STALE", "SIMULATED_SAMPLE"] = Field(
+    freshness_status: Literal["LIVE", "LIVE_NO_RECORDS", "RECENT", "STALE", "SIMULATED_SAMPLE"] = Field(
         ..., description="Data freshness state"
     )
     is_live: bool = Field(default=False, description="True only if retrieved from live official external API")
