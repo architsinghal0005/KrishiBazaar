@@ -101,17 +101,17 @@ KrishiBazaar provides an autonomous negotiation network directly inside **ASI:On
 - [x] Mocked pytest test suite (`tests/test_extraction.py`) and manual verification script (`smoke_test_asi1.py`).
 - [x] Orchestrator integration: parses farmer queries and clarifies missing parameters.
 
-### Phase 4: Deterministic Net-Return Optimizer
-- [ ] Implement `services/optimizer.py` with pure, deterministic financial logic.
-- [ ] Account for APMC cess (typically 1-2%), loading/unloading (hamali), vehicle freight, and weather spoilage risk buffers.
-- [ ] Implement transparent ranking logic (Mandi vs Direct Buyers).
-- [ ] Comprehensive unit tests with zero-tolerance for floating-point inaccuracies.
+### Phase 4: Market, Weather and Deterministic Profit Optimizer (Completed)
+- [x] Official data.gov.in AGMARKNET daily mandi price service (`services/mandi_service.py` & `src/krishibazaar/services/mandi_service.py`).
+- [x] Authentic benchmark fallback dataset across key crops (Onion, Tomato, Potato, Wheat, Soybean, Mustard, Cotton).
+- [x] Open-Meteo forecast service (`services/weather_service.py` & `src/krishibazaar/services/weather_service.py`) with transit hazard evaluation.
+- [x] Deterministic profit optimizer (`services/optimizer.py` & `src/krishibazaar/services/optimizer.py`) with exact formula:
+      `expected_net_return = gross_value - transport_cost - applicable_market_charges - storage_cost - estimated_loss_cost`.
+- [x] Farmer minimum net-return condition enforcement, multi-channel ranking, and transparent explanation engine.
+- [x] Comprehensive data provenance tracking (`source`, `observation_date`, `retrieval_timestamp_utc`, `freshness_status`, `is_live`).
+- [x] 50 unit tests across calculations, invalid inputs, missing fields, API errors, timeouts, and stale/sample records.
 
-### Phase 5: External API Services (Market & Weather)
-- [ ] `services/market.py`: Official Agmarknet / data.gov.in client with verified benchmark fallback cache.
-- [ ] Explicit provenance metadata tagging (`data.gov.in_live` vs `official_benchmark_cache`).
-- [ ] `services/weather.py`: Open-Meteo client assessing precipitation probability and transit rain hazard.
-- [ ] Network failure handling, timeouts, and fallback resilience.
+### Phase 5: Multi-Agent Sub-Agents (Market, Buyer, Transport) & ASI:One Integration
 
 - [ ] Multi-agent coordination and financial ranking synthesis.
 - [ ] ASI:One Interactive Card payloads & structured markdown presentation.

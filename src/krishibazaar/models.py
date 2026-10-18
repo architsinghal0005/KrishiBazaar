@@ -222,31 +222,119 @@ class TransportQuote(BaseModel):
     estimated_transit_hours: float = Field(..., gt=0, description="Estimated transit time in hours")
 
 
+class DataProvenance(BaseModel):
+    """Metadata tracking data origin, observation date, freshness, and live vs simulated status."""
+
+    source: str = Field(..., description="Data provider or dataset name")
+    retrieval_timestamp_utc: str = Field(..., description="ISO 8601 UTC timestamp of retrieval")
+    observation_date: str = Field(..., description="Date of observation or forecast (YYYY-MM-DD)")
+    freshness_status: Literal["LIVE", "RECENT", "STALE", "SIMULATED_SAMPLE"] = Field(
+        ..., description="Data freshness state"
+    )
+    is_live: bool = Field(default=False, description="True only if retrieved from live official external API")
+    disclaimer: str = Field(default="", description="Provenance or simulation disclaimer")
+
+
+class MandiPriceResult(BaseModel):
+    """Typed result wrapper for Mandi price retrieval."""
+
+    success: bool = Field(..., description="True if query succeeded")
+    commodity: str = Field(..., description="Commodity searched")
+    records: list[MandiPriceRecord] = Field(default_factory=list, description="Mandi price records")
+    error_message: str | None = Field(default=None, description="Error message if failed")
+    provenance: DataProvenance = Field(..., description="Data provenance and freshness")
+
+
+class WeatherResult(BaseModel):
+    """Typed result wrapper for Open-Meteo weather forecast retrieval."""
+
+    success: bool = Field(..., description="True if weather query succeeded")
+    location: str = Field(..., description="Location name or district")
+    latitude: float | None = Field(default=None, description="Latitude used")
+    longitude: float | None = Field(default=None, description="Longitude used")
+    report: WeatherRiskReport | None = Field(default=None, description="Detailed weather and transit hazard report")
+    error_message: str | None = Field(default=None, description="Error details if query failed")
+    provenance: DataProvenance = Field(..., description="Data provenance and freshness")
+
+
 class NetReturnBreakdown(BaseModel):
     """
     Deterministic net financial return calculation for a specific sale channel.
-    Calculated via pure Python business logic in optimizer.py.
+    Formulas:
+        gross_value = quantity_quintals * price_per_quintal
+        expected_net_return = gross_value - transport_cost - applicable_market_charges - storage_cost - estimated_loss_cost
     """
 
     scenario_id: str = Field(..., description="Scenario identifier")
     channel_type: Literal["MANDI", "DIRECT_BUYER"] = Field(..., description="Channel type")
     destination_name: str = Field(..., description="Name of the mandi or buyer hub")
     distance_km: float = Field(default=0.0, ge=0, description="Transit distance from farm in km")
-    gross_revenue: float = Field(..., ge=0, description="Quantity * Offered Price (INR)")
-    offered_price_per_quintal: float = Field(..., ge=0, description="Nominal price per quintal in INR")
+    quantity_quintals: float = Field(default=1.0, gt=0, description="Crop quantity in quintals")
+    offered_price_per_quintal: float = Field(..., ge=0, description="Price per quintal in INR")
+
+    # Formula components
+    gross_value: float = Field(default=0.0, ge=0, description="Gross value = quantity * price (INR)")
+    gross_revenue: float = Field(default=0.0, ge=0, description="Alias for gross_value for backward compatibility")
     transport_cost: float = Field(default=0.0, ge=0, description="Transport deduction in INR")
-    mandi_cess_apmc: float = Field(default=0.0, ge=0, description="APMC / Market cess fee in INR")
-    loading_unloading_cost: float = Field(default=0.0, ge=0, description="Hamali/loading labor cost in INR")
+    applicable_market_charges: float = Field(
+        default=0.0, ge=0, description="APMC cess + mandi hamali/labor in INR"
+    )
+    mandi_cess_apmc: float = Field(default=0.0, ge=0, description="APMC fee component in INR")
+    loading_unloading_cost: float = Field(default=0.0, ge=0, description="Labor/hamali component in INR")
+    storage_cost: float = Field(default=0.0, ge=0, description="Storage fee in INR (separately identifiable)")
+    estimated_loss_cost: float = Field(
+        default=0.0, ge=0, description="Weather-adjusted spoilage/shrinkage loss in INR"
+    )
     spoilage_risk_penalty: float = Field(
-        default=0.0, ge=0, description="Weather-adjusted transit risk penalty in INR"
+        default=0.0, ge=0, description="Alias for estimated_loss_cost"
     )
-    total_deductions: float = Field(..., ge=0, description="Sum of all cost deductions in INR")
-    net_return: float = Field(..., description="Gross Revenue minus Total Deductions in INR")
+    total_deductions: float = Field(default=0.0, ge=0, description="Sum of all cost deductions in INR")
+    expected_net_return: float = Field(default=0.0, description="Net in-pocket return in INR")
+    net_return: float = Field(default=0.0, description="Alias for expected_net_return")
     net_return_per_quintal: float = Field(
-        ..., description="Net return divided by crop quantity (INR/quintal)"
+        default=0.0, description="Net return divided by quantity (INR/quintal)"
     )
+
+    # Ranking & Evaluation
+    meets_minimum_condition: bool = Field(
+        default=True, description="True if expected_net_return >= farmer's minimum target"
+    )
+    is_feasible: bool = Field(default=True, description="True if viable and meets threshold")
     rank: int = Field(default=1, ge=1, description="Rank ordered by net return (1 = best)")
     recommendation_note: str = Field(default="", description="Key rationale explaining the ranking")
+
+    def model_post_init(self, __context: Any) -> None:
+        """Sync aliases and calculate values if not provided."""
+        if self.gross_value == 0.0 and self.gross_revenue > 0.0:
+            object.__setattr__(self, "gross_value", self.gross_revenue)
+        elif self.gross_revenue == 0.0 and self.gross_value > 0.0:
+            object.__setattr__(self, "gross_revenue", self.gross_value)
+
+        if self.expected_net_return == 0.0 and self.net_return != 0.0:
+            object.__setattr__(self, "expected_net_return", self.net_return)
+        elif self.net_return == 0.0 and self.expected_net_return != 0.0:
+            object.__setattr__(self, "net_return", self.expected_net_return)
+
+        if self.applicable_market_charges == 0.0 and (self.mandi_cess_apmc > 0 or self.loading_unloading_cost > 0):
+            object.__setattr__(self, "applicable_market_charges", round(self.mandi_cess_apmc + self.loading_unloading_cost, 2))
+
+        if self.estimated_loss_cost == 0.0 and self.spoilage_risk_penalty > 0:
+            object.__setattr__(self, "estimated_loss_cost", self.spoilage_risk_penalty)
+        elif self.spoilage_risk_penalty == 0.0 and self.estimated_loss_cost > 0:
+            object.__setattr__(self, "spoilage_risk_penalty", self.estimated_loss_cost)
+
+
+class OptimizationResult(BaseModel):
+    """Ranked comparison of all feasible and non-feasible selling channels."""
+
+    crop: str = Field(..., description="Crop name")
+    quantity_quintals: float = Field(..., gt=0, description="Crop quantity")
+    minimum_net_return_inr: float | None = Field(default=None, description="Farmer's target net return")
+    all_options: list[NetReturnBreakdown] = Field(default_factory=list, description="All evaluated channels")
+    feasible_options: list[NetReturnBreakdown] = Field(default_factory=list, description="Options meeting threshold")
+    recommended_option: NetReturnBreakdown | None = Field(default=None, description="Highest ranking option")
+    summary_explanation: str = Field(default="", description="Detailed narrative explaining ranking")
+
 
 
 class BookingRequest(BaseModel):
