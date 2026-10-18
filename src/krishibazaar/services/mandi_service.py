@@ -356,8 +356,122 @@ DATAGOV_REQUEST_HEADERS: dict[str, str] = {
     "Connection": "keep-alive",
 }
 
+# District-to-State registry for prominent Indian agricultural production regions
+DISTRICT_STATE_REGISTRY: dict[str, str] = {
+    # Maharashtra
+    "nashik": "Maharashtra",
+    "lasalgaon": "Maharashtra",
+    "pimpalgaon": "Maharashtra",
+    "yeola": "Maharashtra",
+    "pune": "Maharashtra",
+    "junnar": "Maharashtra",
+    "solapur": "Maharashtra",
+    "latur": "Maharashtra",
+    "ahilyanagar": "Maharashtra",
+    "ahmednagar": "Maharashtra",
+    "satara": "Maharashtra",
+    "jalgaon": "Maharashtra",
+    "chattrapati sambhajinagar": "Maharashtra",
+    "aurangabad": "Maharashtra",
+    "kolhapur": "Maharashtra",
+    "sangli": "Maharashtra",
+    "nagpur": "Maharashtra",
+    "amravati": "Maharashtra",
+    # Madhya Pradesh
+    "indore": "Madhya Pradesh",
+    "sehore": "Madhya Pradesh",
+    "ujjain": "Madhya Pradesh",
+    "dewas": "Madhya Pradesh",
+    "bhopal": "Madhya Pradesh",
+    "mandsaur": "Madhya Pradesh",
+    "neemuch": "Madhya Pradesh",
+    # Punjab
+    "khanna": "Punjab",
+    "ludhiana": "Punjab",
+    "patiala": "Punjab",
+    "jalandhar": "Punjab",
+    "bathinda": "Punjab",
+    # Haryana
+    "karnal": "Haryana",
+    "sirsa": "Haryana",
+    "ambala": "Haryana",
+    "hisar": "Haryana",
+    # Rajasthan
+    "bharatpur": "Rajasthan",
+    "alwar": "Rajasthan",
+    "kota": "Rajasthan",
+    "jaipur": "Rajasthan",
+    # Gujarat
+    "rajkot": "Gujarat",
+    "surat": "Gujarat",
+    "ahmedabad": "Gujarat",
+    "gondal": "Gujarat",
+    # Karnataka
+    "kolar": "Karnataka",
+    "bengaluru": "Karnataka",
+    "belagavi": "Karnataka",
+    # Andhra Pradesh
+    "guntur": "Andhra Pradesh",
+    # Uttar Pradesh
+    "agra": "Uttar Pradesh",
+    "kanpur": "Uttar Pradesh",
+    "lucknow": "Uttar Pradesh",
+    "delhi": "NCT of Delhi",
+}
+
+
+def resolve_district_state(origin_location: str) -> tuple[str, str | None]:
+    """
+    Resolve district and state name from a user's free-form origin location string.
+    Returns (cleaned_district, resolved_state_or_None).
+    """
+    if not origin_location:
+        return ("", None)
+    loc_clean = origin_location.strip()
+    loc_lower = loc_clean.lower()
+
+    # Check for known state in location string
+    known_states = [
+        "Maharashtra",
+        "Madhya Pradesh",
+        "Punjab",
+        "Haryana",
+        "Rajasthan",
+        "Gujarat",
+        "Karnataka",
+        "Andhra Pradesh",
+        "Uttar Pradesh",
+    ]
+    detected_state = None
+    for st in known_states:
+        if st.lower() in loc_lower:
+            detected_state = st
+            break
+
+    # Check district matching in registry
+    detected_district = loc_clean
+    for dist, st in DISTRICT_STATE_REGISTRY.items():
+        if dist in loc_lower:
+            detected_district = dist.title()
+            if not detected_state:
+                detected_state = st
+            break
+
+    # If comma-separated, check parts (e.g. "Niphad, Nashik")
+    if "," in loc_clean and detected_district == loc_clean:
+        parts = [p.strip() for p in loc_clean.split(",")]
+        for p in parts:
+            if p.lower() in DISTRICT_STATE_REGISTRY:
+                detected_district = p.title()
+                if not detected_state:
+                    detected_state = DISTRICT_STATE_REGISTRY[p.lower()]
+                break
+
+    return (detected_district, detected_state)
+
 
 def normalize_arrival_date(raw_date: str | None) -> str:
+
     """Normalize date format (converts DD/MM/YYYY to YYYY-MM-DD or preserves ISO)."""
     if not raw_date:
         return datetime.now(timezone.utc).strftime("%Y-%m-%d")

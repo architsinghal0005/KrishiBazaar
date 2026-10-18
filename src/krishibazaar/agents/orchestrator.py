@@ -16,7 +16,12 @@ from uagents_core.contrib.protocols.chat import (
 )
 
 from krishibazaar.config import settings
+from krishibazaar.models import MandiPriceResult
 from krishibazaar.services.extraction import extract_farmer_intent_async
+from krishibazaar.services.mandi_service import (
+    get_mandi_prices_async,
+    resolve_district_state,
+)
 from krishibazaar.storage import storage
 
 # Initialize Agent Chat Protocol using official Fetch.ai specification
@@ -33,6 +38,82 @@ def build_greeting_response(user_text: str | None = None) -> str:
         "👉 **How to start:** Tell me what you have to sell, for example:\n"
         "*\"I have 50 quintals of onions in Nashik, and I want at least INR 85000 net by tomorrow.\"*"
     )
+
+
+def format_mandi_market_report(
+    crop: str,
+    district: str,
+    state: str | None,
+    mandi_result: MandiPriceResult,
+    nearby_result: MandiPriceResult | None = None,
+) -> list[str]:
+    """Format transparent mandi price report, zero-record notice, or error explanation."""
+    lines: list[str] = []
+
+    # Case 1: Live records found for target district
+    if mandi_result.success and mandi_result.records:
+        lines.append(f"📊 **Live Mandi Wholesale Prices ({crop.title()} in {district}):**")
+        lines.append(f"*Source: {mandi_result.provenance.source} | Date: {mandi_result.provenance.observation_date}*")
+
+        has_authentic = False
+        for rec in mandi_result.records:
+            if rec.is_suspicious:
+                lines.append(
+                    f"• ⚠️ **{rec.mandi_name}** ({rec.district}): Modal Price INR {rec.modal_price:,.2f}/quintal — "
+                    f"*Flagged as suspicious ({rec.suspicion_reason}) and excluded from recommendation.*"
+                )
+            else:
+                has_authentic = True
+                price_range = (
+                    f"(Min: INR {rec.min_price:,.2f}, Max: INR {rec.max_price:,.2f})"
+                    if rec.min_price and rec.max_price
+                    else ""
+                )
+                lines.append(
+                    f"• **{rec.mandi_name}** ({rec.district}): Modal Price **INR {rec.modal_price:,.2f}**/quintal {price_range} — "
+                    f"Arrival Date: {rec.arrival_date}"
+                )
+
+        if not has_authentic:
+            lines.append("⚠️ *All reported prices for this district were flagged as suspicious (e.g. bundle/kg entries).*")
+
+    # Case 2: Zero live records for target district
+    elif mandi_result.success and not mandi_result.records:
+        loc_str = f"district '{district}'" + (f", {state}" if state else "")
+        lines.append(
+            f"ℹ️ **Live Mandi Status:** No live arrival records were reported for '{crop.title()}' in {loc_str} on data.gov.in (AGMARKNET) today."
+        )
+        lines.append("*We never fabricate prices or substitute sample benchmark data as live prices.*")
+
+        # Offer clearly labelled nearby-district live benchmarks if actually retrieved
+        if nearby_result and nearby_result.success and nearby_result.records:
+            lines.append("")
+            lines.append(f"📍 **Nearby Live Mandi Benchmarks ({state or 'Region'}):**")
+            lines.append(f"*Retrieved live from data.gov.in (AGMARKNET) on {nearby_result.provenance.observation_date}:*")
+            shown = 0
+            for rec in nearby_result.records:
+                if rec.is_suspicious:
+                    lines.append(
+                        f"• ⚠️ **{rec.mandi_name}** ({rec.district}): Modal Price INR {rec.modal_price:,.2f}/quintal — "
+                        f"*Flagged as suspicious ({rec.suspicion_reason})*"
+                    )
+                else:
+                    lines.append(
+                        f"• **{rec.mandi_name}** ({rec.district}): Modal Price **INR {rec.modal_price:,.2f}**/quintal — "
+                        f"Arrival Date: {rec.arrival_date}"
+                    )
+                shown += 1
+                if shown >= 5:
+                    break
+
+    # Case 3: API failed or timed out
+    else:
+        err_msg = mandi_result.error_message or "API connection unavailable"
+        lines.append(f"⚠️ **Market Data Notice:** Live mandi prices could not be retrieved from data.gov.in at this moment ({err_msg}).")
+        lines.append("*We do not invent prices or make unverified assumptions.*")
+
+    return lines
+
 
 
 @chat_proto.on_message(ChatMessage)
@@ -69,40 +150,93 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage) -> No
         intent = await extract_farmer_intent_async(user_text)
 
         # 5. Formulate response payload based on intent completeness
-        if intent.is_complete and intent.crop and intent.quantity_quintals and intent.origin_location:
-            reply_lines = [
-                "🌾 **KrishiBazaar: Request Understood!** 🌾",
-                "",
-                f"• **Crop:** {intent.crop.title()}",
-                f"• **Quantity:** {intent.quantity_quintals:g} quintals (approx. {intent.quantity_quintals * 100:g} kg)",
-                f"• **Origin Location:** {intent.origin_location}",
-            ]
-            if intent.selling_deadline:
-                reply_lines.append(f"• **Selling Deadline:** {intent.selling_deadline}")
-            if intent.minimum_net_return_inr is not None:
-                reply_lines.append(f"• **Target Net Return:** INR {intent.minimum_net_return_inr:,.2f}")
-            if intent.storage_preference:
-                reply_lines.append(f"• **Storage Preference:** {intent.storage_preference}")
+        if intent.crop and intent.origin_location:
+            # Resolve district and state from farmer location
+            district, state = resolve_district_state(intent.origin_location)
 
-            reply_lines.extend([
-                "",
-                f"✅ *Extracted and validated via ASI:One ({intent.extraction_source}).*",
-                "",
-                "ℹ️ **Status:** Your harvest inquiry is verified and stored in session. "
-                "Market tools (mandi price feeds, weather hazard scoring, and buyer negotiations) "
-                "are being connected in the next phase to evaluate your net payouts."
-            ])
+            # Query live mandi prices for the specific district
+            mandi_result = await get_mandi_prices_async(
+                commodity=intent.crop,
+                district=district,
+                state=state,
+            )
+
+            # If zero live records for requested district and state is known, query nearby state mandis
+            nearby_result: MandiPriceResult | None = None
+            if mandi_result.success and not mandi_result.records and state:
+                nearby_result = await get_mandi_prices_async(
+                    commodity=intent.crop,
+                    state=state,
+                    district=None,
+                )
+
+            reply_lines: list[str] = []
+
+            if intent.is_complete and intent.quantity_quintals:
+                reply_lines.extend([
+                    "🌾 **KrishiBazaar: Request Understood!** 🌾",
+                    "",
+                    f"• **Crop:** {intent.crop.title()}",
+                    f"• **Quantity:** {intent.quantity_quintals:g} quintals (approx. {intent.quantity_quintals * 100:g} kg)",
+                    f"• **Origin Location:** {intent.origin_location} ({district}{f', {state}' if state else ''})",
+                ])
+                if intent.selling_deadline:
+                    reply_lines.append(f"• **Selling Deadline:** {intent.selling_deadline}")
+                if intent.minimum_net_return_inr is not None:
+                    reply_lines.append(f"• **Target Net Return:** INR {intent.minimum_net_return_inr:,.2f}")
+                if intent.storage_preference:
+                    reply_lines.append(f"• **Storage Preference:** {intent.storage_preference}")
+                reply_lines.append("")
+                reply_lines.append(f"✅ *Extracted and validated via ASI:One ({intent.extraction_source}).*")
+                reply_lines.append("")
+            else:
+                reply_lines.extend([
+                    "🌾 **KrishiBazaar: Mandi Market Enquiry** 🌾",
+                    "",
+                    f"• **Crop:** {intent.crop.title()}",
+                    f"• **Origin Location:** {intent.origin_location} ({district}{f', {state}' if state else ''})",
+                    "",
+                ])
+
+            # Append live mandi market report
+            mandi_report = format_mandi_market_report(
+                crop=intent.crop,
+                district=district,
+                state=state,
+                mandi_result=mandi_result,
+                nearby_result=nearby_result,
+            )
+            reply_lines.extend(mandi_report)
+
+            # Next step guidance
+            reply_lines.append("")
+            if intent.is_complete and intent.quantity_quintals:
+                reply_lines.append(
+                    "ℹ️ **Status:** Your harvest inquiry and verified market rates are recorded in session. "
+                    "Next, transit weather hazard scoring and buyer negotiations will evaluate your guaranteed net return."
+                )
+                try:
+                    storage.save_session(
+                        session_id=sender,
+                        farmer_id=sender,
+                        state="INTENT_CONFIRMED",
+                    )
+                except Exception:
+                    pass
+            else:
+                if intent.follow_up_question:
+                    reply_lines.append(f"👉 **To calculate your net return:** {intent.follow_up_question}")
+                try:
+                    storage.save_session(
+                        session_id=sender,
+                        farmer_id=sender,
+                        state="AWAITING_DETAILS",
+                    )
+                except Exception:
+                    pass
+
             reply_body = "\n".join(reply_lines)
 
-            # Persist session state
-            try:
-                storage.save_session(
-                    session_id=sender,
-                    farmer_id=sender,
-                    state="INTENT_CONFIRMED",
-                )
-            except Exception:
-                pass
         else:
             # Check if user gave a bare greeting
             cleaned_text = user_text.lower().strip()
