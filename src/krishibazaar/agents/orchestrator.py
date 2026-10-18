@@ -34,7 +34,7 @@ def build_greeting_response(user_text: str | None = None) -> str:
         "🌾 **Namaste! Welcome to KrishiBazaar (कृषिबाज़ार)** 🌾\n\n"
         "I am your autonomous farm-to-market negotiation agent. I help Indian farmers compare "
         "mandi benchmark prices, assess transit weather hazards, receive competitive buyer offers, "
-        "and calculate guaranteed net returns.\n\n"
+        "and calculate estimated net returns.\n\n"
         "👉 **How to start:** Tell me what you have to sell, for example:\n"
         "*\"I have 50 quintals of onions in Nashik, and I want at least INR 85000 net by tomorrow.\"*"
     )
@@ -85,10 +85,11 @@ def format_mandi_market_report(
         )
         lines.append("*We never fabricate prices or substitute sample benchmark data as live prices.*")
 
-        # Offer clearly labelled nearby-district live benchmarks if actually retrieved
+        # Offer clearly labelled state live benchmarks if actually retrieved
         if nearby_result and nearby_result.success and nearby_result.records:
             lines.append("")
-            lines.append(f"📍 **Nearby Live Mandi Benchmarks ({state or 'Region'}):**")
+            state_label = f"{state} " if state else ""
+            lines.append(f"📍 **Other Live {state_label}Mandi Benchmarks:**")
             lines.append(f"*Retrieved live from data.gov.in (AGMARKNET) on {nearby_result.provenance.observation_date}:*")
             shown = 0
             for rec in nearby_result.records:
@@ -212,8 +213,8 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage) -> No
             reply_lines.append("")
             if intent.is_complete and intent.quantity_quintals:
                 reply_lines.append(
-                    "ℹ️ **Status:** Your harvest inquiry and verified market rates are recorded in session. "
-                    "Next, transit weather hazard scoring and buyer negotiations will evaluate your guaranteed net return."
+                    "ℹ️ **Status:** Your harvest inquiry was recorded and live market rates were retrieved for this response. "
+                    "Next, transit weather hazard scoring and buyer negotiations will evaluate your estimated net return."
                 )
                 try:
                     storage.save_session(

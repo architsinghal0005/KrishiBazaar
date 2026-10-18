@@ -234,9 +234,10 @@ async def test_orchestrator_zero_records_for_district_flow():
         assert "No live arrival records were reported for 'Onion' in district 'Nashik'" in text_content
         assert "never fabricate prices" in text_content.lower()
 
-        # Must display retrieved nearby benchmarks
-        assert "Nearby Live Mandi Benchmarks" in text_content
+        # Must display retrieved state benchmarks
+        assert "Other Live Maharashtra Mandi Benchmarks" in text_content
         assert "APMC Newasa" in text_content
+
         assert "3,500" in text_content
 
 
