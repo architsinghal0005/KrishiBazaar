@@ -1,4 +1,4 @@
-﻿"""
+"""
 Pydantic Domain Models for KrishiBazaar.
 Defines structured schemas for farmer inquiries, mandi evidence, weather risk,
 buyer offers, transport quotes, deterministic net-return breakdowns, and booking records.
@@ -589,7 +589,7 @@ class PaymentReviewDetails(BaseModel):
         description="Live balance verification status of designated payer wallet on Dorado testnet",
     )
     testnet_notice: str = Field(
-        default="âš ï¸ TESTNET DEMO MICRO-FEE ONLY. No real fiat or bank funds debited.",
+        default="⚠️ TESTNET DEMO MICRO-FEE ONLY. No real fiat or bank funds debited.",
         description="Prominent testnet safety notice",
     )
 

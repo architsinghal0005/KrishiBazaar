@@ -1,4 +1,4 @@
-﻿"""
+"""
 Regression test suite for Booking-Specific Payment Audit Routing in KrishiBazaar.
 
 Tests:
@@ -281,7 +281,7 @@ async def test_linked_payment_returned_when_booking_matches(
 
 
 # ==============================================================================
-# TEST 5: Strict Record Isolation â€” Historical Payments Never Substituted
+# TEST 5: Strict Record Isolation — Historical Payments Never Substituted
 # ==============================================================================
 @pytest.mark.asyncio
 async def test_strict_record_isolation_historical_payments_never_substituted(

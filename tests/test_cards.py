@@ -195,7 +195,10 @@ def test_build_channel_recommendations_card(sample_optimization_result: Optimiza
     assert card is not None
     assert isinstance(card.payload, CarouselCardPayload)
     assert len(card.payload.items) == 2
-
+    # Recommendation cards should clearly label deduction components.
+    for item in card.payload.items:
+        assert "Market charges (cess/hamali): INR" in item.secondary_text
+        assert "Estimated weather loss: INR" in item.secondary_text
     # Check Rank 1
     item1 = card.payload.items[0]
     assert "Rank #1" in item1.title

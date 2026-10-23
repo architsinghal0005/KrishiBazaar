@@ -1,4 +1,4 @@
-﻿"""
+"""
 KrishiBazaar Production & Demo Smoke Test Utility (Phase 8).
 Verifies configured agent ports, validates safe non-booking queries across all specialists,
 and confirms end-to-end multi-agent coordination without commercial side effects.
@@ -191,7 +191,7 @@ async def run_live_pipeline_smoke_test(query_text: str, results: dict[str, Any])
     qty_str = f"{intent.quantity_quintals:g}" if intent.quantity_quintals is not None else "N/A"
     crop_str = intent.crop or "Produce"
     loc_str = intent.origin_location or "Origin"
-    print(f"  â€¢ Produce Request:      {qty_str} qtl {crop_str} in {loc_str} (Target: {target_str})", flush=True)
+    print(f"  • Produce Request:      {qty_str} qtl {crop_str} in {loc_str} (Target: {target_str})", flush=True)
 
     res_m = results.get("market")
     res_w = results.get("weather")
@@ -222,19 +222,19 @@ async def run_live_pipeline_smoke_test(query_text: str, results: dict[str, Any])
         minimum_net_return_inr=intent.minimum_net_return_inr,
     )
 
-    print(f"  â€¢ Live Mandis Retreived: {len(res_m.records) if hasattr(res_m, 'records') else 0} records from data.gov.in (AGMARKNET)", flush=True)
-    print(f"  â€¢ Valid Mandis Analyzed: {len(valid_mandis)} authentic records", flush=True)
-    print(f"  â€¢ Buyer Network Bids:   {len(combined_buyer_offers)} offers from Buyer A & Buyer B", flush=True)
-    print(f"  â€¢ Transport Quotes:     {len(transport_quotes)} fleet quotes from Transport Agent", flush=True)
-    print(f"  â€¢ Channels Ranked:      {len(opt.all_options)} total selling channels evaluated", flush=True)
+    print(f"  • Live Mandis Retreived: {len(res_m.records) if hasattr(res_m, 'records') else 0} records from data.gov.in (AGMARKNET)", flush=True)
+    print(f"  • Valid Mandis Analyzed: {len(valid_mandis)} authentic records", flush=True)
+    print(f"  • Buyer Network Bids:   {len(combined_buyer_offers)} offers from Buyer A & Buyer B", flush=True)
+    print(f"  • Transport Quotes:     {len(transport_quotes)} fleet quotes from Transport Agent", flush=True)
+    print(f"  • Channels Ranked:      {len(opt.all_options)} total selling channels evaluated", flush=True)
     if opt.recommended_option:
         top = opt.recommended_option
-        print(f"  â€¢ Top Recommended:      Rank #{top.rank} {top.destination_name} [{top.channel_type}]", flush=True)
-        print(f"  â€¢ Est. Net Return:      INR {top.expected_net_return:,.2f} ({top.net_return_per_quintal:,.2f}/qtl)", flush=True)
-        print(f"  â€¢ Condition Met:        {'YES' if top.meets_minimum_condition else 'NO'}", flush=True)
-        print(f"  â€¢ Price Provenance:     {top.price_provenance}", flush=True)
-        print(f"  â€¢ Deductions Total:     INR {top.total_deductions:,.2f} (Transport: INR {top.transport_cost:,.2f}, Cess: INR {top.mandi_cess_apmc:,.2f}, Labor: INR {top.loading_unloading_cost:,.2f}, Spoilage: INR {top.estimated_loss_cost:,.2f})", flush=True)
-        print("  â€¢ Safety Gate:          Active (Proposal generated, NO commercial booking created)", flush=True)
+        print(f"  • Top Recommended:      Rank #{top.rank} {top.destination_name} [{top.channel_type}]", flush=True)
+        print(f"  • Est. Net Return:      INR {top.expected_net_return:,.2f} ({top.net_return_per_quintal:,.2f}/qtl)", flush=True)
+        print(f"  • Condition Met:        {'YES' if top.meets_minimum_condition else 'NO'}", flush=True)
+        print(f"  • Price Provenance:     {top.price_provenance}", flush=True)
+        print(f"  • Deductions Total:     INR {top.total_deductions:,.2f} (Transport: INR {top.transport_cost:,.2f}, Cess: INR {top.mandi_cess_apmc:,.2f}, Labor: INR {top.loading_unloading_cost:,.2f}, Spoilage: INR {top.estimated_loss_cost:,.2f})", flush=True)
+        print("  • Safety Gate:          Active (Proposal generated, NO commercial booking created)", flush=True)
 
     print("[PASS] Live multi-agent pipeline verified with 100% data consistency.", flush=True)
     return True
@@ -247,13 +247,13 @@ async def run_in_memory_smoke_test(query_text: str) -> bool:
     from krishibazaar.models import MandiPriceRecord
 
     print("\n[*] In-Memory Offline Demonstration (Static 1-Mandi Sample Benchmark):", flush=True)
-    print("  â€¢ Notice: Offline mode using static sample benchmark (Nashik Mandi @ INR 2,200/qtl).", flush=True)
+    print("  • Notice: Offline mode using static sample benchmark (Nashik Mandi @ INR 2,200/qtl).", flush=True)
     intent = extract_farmer_intent(query_text)
-    print(f"  â€¢ Extracted Crop:       {intent.crop}", flush=True)
-    print(f"  â€¢ Extracted Quantity:   {intent.quantity_quintals} qtl", flush=True)
-    print(f"  â€¢ Extracted Location:   {intent.origin_location}", flush=True)
-    print(f"  â€¢ Extracted Target:     INR {intent.minimum_net_return_inr:,.2f}" if intent.minimum_net_return_inr else "  â€¢ Extracted Target:     None", flush=True)
-    print(f"  â€¢ Completeness:         {intent.is_complete} (Source: {intent.extraction_source})", flush=True)
+    print(f"  • Extracted Crop:       {intent.crop}", flush=True)
+    print(f"  • Extracted Quantity:   {intent.quantity_quintals} qtl", flush=True)
+    print(f"  • Extracted Location:   {intent.origin_location}", flush=True)
+    print(f"  • Extracted Target:     INR {intent.minimum_net_return_inr:,.2f}" if intent.minimum_net_return_inr else "  • Extracted Target:     None", flush=True)
+    print(f"  • Completeness:         {intent.is_complete} (Source: {intent.extraction_source})", flush=True)
 
     # Static sample benchmark mandi for offline arithmetic check
     mock_mandi = [
@@ -292,14 +292,14 @@ async def run_in_memory_smoke_test(query_text: str) -> bool:
         minimum_net_return_inr=intent.minimum_net_return_inr,
     )
 
-    print(f"  â€¢ Channels Ranked:      {len(opt.all_options)} (1 sample mandi + 3 buyer bids)", flush=True)
+    print(f"  • Channels Ranked:      {len(opt.all_options)} (1 sample mandi + 3 buyer bids)", flush=True)
     if opt.recommended_option:
         top = opt.recommended_option
-        print(f"  â€¢ Top Recommended:      Rank #{top.rank} {top.destination_name} ({top.channel_type})", flush=True)
-        print(f"  â€¢ Est. Net Return:      INR {top.expected_net_return:,.2f} ({top.net_return_per_quintal:,.2f}/qtl)", flush=True)
-        print(f"  â€¢ Condition Met:        {'YES' if top.meets_minimum_condition else 'NO'}", flush=True)
-        print("  â€¢ Difference Note:      In live mode with active data.gov.in AGMARKNET feed, multiple mandis (including Dindori (Vani) @ INR 4,400/qtl) yield INR 213,519.25 across 12 channels.", flush=True)
-        print("  â€¢ Safety Gate:          Active (Proposal generated, NO commercial booking created)", flush=True)
+        print(f"  • Top Recommended:      Rank #{top.rank} {top.destination_name} ({top.channel_type})", flush=True)
+        print(f"  • Est. Net Return:      INR {top.expected_net_return:,.2f} ({top.net_return_per_quintal:,.2f}/qtl)", flush=True)
+        print(f"  • Condition Met:        {'YES' if top.meets_minimum_condition else 'NO'}", flush=True)
+        print("  • Difference Note:      In live mode with active data.gov.in AGMARKNET feed, multiple mandis (including Dindori (Vani) @ INR 4,400/qtl) yield INR 213,519.25 across 12 channels.", flush=True)
+        print("  • Safety Gate:          Active (Proposal generated, NO commercial booking created)", flush=True)
 
     print("[PASS] In-memory pipeline executed with 100% arithmetic and safety compliance.", flush=True)
     return True
@@ -382,10 +382,10 @@ async def main() -> int:
                     item_count = f"({len(res.quotes)} quotes)"
                 elif hasattr(res, "report") and res.report:
                     item_count = f"(Hazard: {res.report.spoilage_hazard_level})"
-                print(f"  â€¢ {spec_name.title():<12}: [PASS] Remote response received {item_count} via HTTP", flush=True)
+                print(f"  • {spec_name.title():<12}: [PASS] Remote response received {item_count} via HTTP", flush=True)
             else:
                 err_text = getattr(res, "error_message", None) or str(res)
-                print(f"  â€¢ {spec_name.title():<12}: [WARN] Communication note: {err_text}", flush=True)
+                print(f"  • {spec_name.title():<12}: [WARN] Communication note: {err_text}", flush=True)
 
         print("\n[SUCCESS] All 5 specialist agents successfully queried via real HTTP /submit messaging.", flush=True)
 

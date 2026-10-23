@@ -1,4 +1,4 @@
-﻿"""
+"""
 Deterministic Net-Return Optimizer for KrishiBazaar.
 Performs exact deterministic mathematical financial modeling using stated assumptions, modal benchmarks, and simulated quotes.
 
@@ -156,8 +156,10 @@ def compute_weather_risk_details(
     and return an explicit explanation connecting the weather forecast with the deduction.
     """
     if not weather_report:
-        return 0.0, "Weather forecast unavailable; standard dry transit assumed (INR 0.00)"
-
+        return 0.0, (
+            "Weather forecast unavailable; spoilage risk could not be assessed. "
+            "INR 0.00 is not a verified zero-loss estimate."
+        )
     hazard = (weather_report.spoilage_hazard_level or "LOW").upper()
     if hazard == "HIGH":
         potential = round(gross_value * 0.035, 2)
@@ -445,9 +447,9 @@ def optimize_sales_channels(
     elif feasible_options:
         top = feasible_options[0]
         channel_desc = (
-            f"APMC Wholesale Mandi ({top.destination_name}) â€” official benchmark price, NOT an actual buyer purchase offer"
+            f"APMC Wholesale Mandi ({top.destination_name}) — official benchmark price, NOT an actual buyer purchase offer"
             if top.channel_type == "MANDI"
-            else f"Direct Buyer ({top.destination_name}) â€” simulated benchmark bid, NOT an actual commercial contract"
+            else f"Direct Buyer ({top.destination_name}) — simulated benchmark bid, NOT an actual commercial contract"
         )
         if top.is_apmc_exempt or (top.channel_type == "DIRECT_BUYER" and top.mandi_cess_apmc == 0.0):
             cess_line = (
@@ -466,11 +468,11 @@ def optimize_sales_channels(
 
         explanation = (
             f"**Recommended Option (Rank 1): {top.destination_name}**\n\n"
-            f"â€¢ **Channel Type:** {channel_desc}\n"
-            f"â€¢ **Estimated Net In-Pocket Return:** INR {top.expected_net_return:,.2f} "
-            f"(INR {top.net_return_per_quintal:,.2f} per quintal) â€” *Advisory estimate only, not a guaranteed payout*\n"
-            f"â€¢ **Gross Value:** INR {top.gross_value:,.2f} ({top.quantity_quintals:g} qtl @ INR {top.offered_price_per_quintal:,.2f}/qtl)\n"
-            f"â€¢ **Itemized Deductions (Assumed & Estimated):**\n"
+            f"• **Channel Type:** {channel_desc}\n"
+            f"• **Estimated Net In-Pocket Return:** INR {top.expected_net_return:,.2f} "
+            f"(INR {top.net_return_per_quintal:,.2f} per quintal) — *Advisory estimate only, not a guaranteed payout*\n"
+            f"• **Gross Value:** INR {top.gross_value:,.2f} ({top.quantity_quintals:g} qtl @ INR {top.offered_price_per_quintal:,.2f}/qtl)\n"
+            f"• **Itemized Deductions (Assumed & Estimated):**\n"
             f"  - Transport Freight: INR {top.transport_cost:,.2f} *({top.transport_provenance})*\n"
             f"{cess_line}"
             f"{hamali_line}"
@@ -497,7 +499,7 @@ def optimize_sales_channels(
         top = sorted_options[0]
         shortfall = round(minimum_net_return_inr - top.expected_net_return, 2) if minimum_net_return_inr else 0.0
         explanation = (
-            f"âš ï¸ **Attention: None of the {len(sorted_options)} available options met your minimum net threshold** "
+            f"⚠️ **Attention: None of the {len(sorted_options)} available options met your minimum net threshold** "
             f"of INR {minimum_net_return_inr:,.2f}.\n\n"
             f"The best available option is **{top.destination_name}**, yielding an estimated net return of "
             f"INR {top.expected_net_return:,.2f} (a shortfall of INR {shortfall:,.2f})."

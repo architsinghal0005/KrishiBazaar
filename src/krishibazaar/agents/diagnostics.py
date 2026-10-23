@@ -1,4 +1,4 @@
-﻿"""
+"""
 Startup Diagnostics and Configuration Validation Module for KrishiBazaar (Phase 8).
 Provides clean startup banners, safe configuration validation without secret leaks,
 and port/connectivity health checks for hackathon demo hardening.
@@ -24,7 +24,7 @@ def validate_configuration() -> list[str]:
     """
     issues: list[str] = []
 
-    # 1. Port collision check across all 6 agents
+    # 1. Port collision check across all 7 agents
     port_assignments = {
         "Orchestrator": settings.orchestrator_port,
         "Market Specialist": settings.market_agent_port,
@@ -32,6 +32,7 @@ def validate_configuration() -> list[str]:
         "Buyer A Specialist": settings.buyer_agent_port,
         "Buyer B Specialist": settings.buyer_b_agent_port,
         "Transport Specialist": settings.transport_agent_port,
+        "Payment Specialist": settings.payment_agent_port,
     }
 
     seen_ports: dict[int, str] = {}
@@ -63,6 +64,7 @@ def validate_configuration() -> list[str]:
         "BUYER_AGENT_ADDRESS": settings.buyer_agent_address,
         "BUYER_B_AGENT_ADDRESS": settings.buyer_b_agent_address,
         "TRANSPORT_AGENT_ADDRESS": settings.transport_agent_address,
+        "PAYMENT_PAYEE_AGENT_ADDRESS": settings.payment_payee_agent_address,
     }
     for env_var, addr in specialist_addrs.items():
         if addr is not None:
@@ -137,23 +139,23 @@ def print_startup_banner(
     print("=" * 76)
     print(f" KrishiBazaar Agent: {agent_name} [{role}]")
     print("=" * 76)
-    print(f"  â€¢ Process PID:   {os.getpid()}")
-    print(f"  â€¢ Address:       {address}")
-    print(f"  â€¢ Local Port:    {port} (http://127.0.0.1:{port}/submit)")
-    print(f"  â€¢ Database Path: {Path(settings.database_path).resolve()}")
-    print(f"  â€¢ Environment:   {settings.environment} | Python: {python_ver}")
-    print(f"  â€¢ Mailbox:       {mailbox_status}")
-    print(f"  â€¢ Telemetry:     {telemetry_status}")
+    print(f"  • Process PID:   {os.getpid()}")
+    print(f"  • Address:       {address}")
+    print(f"  • Local Port:    {port} (http://127.0.0.1:{port}/submit)")
+    print(f"  • Database Path: {Path(settings.database_path).resolve()}")
+    print(f"  • Environment:   {settings.environment} | Python: {python_ver}")
+    print(f"  • Mailbox:       {mailbox_status}")
+    print(f"  • Telemetry:     {telemetry_status}")
 
     if extra_details:
         for k, v in extra_details.items():
-            print(f"  â€¢ {k:<15}: {v}")
+            print(f"  • {k:<15}: {v}")
 
     # Check for configuration warnings
     warnings = validate_configuration()
     if warnings:
         print("-" * 76)
-        print("  âš ï¸ Configuration Notices:")
+        print("  ⚠️ Configuration Notices:")
         for w in warnings:
             print(f"    - {w}")
 

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Regression and Integration Tests for Bug Fix:
 KrishiBazaar Repeatedly Asks for Farmer Details (tests/test_context_and_routing_regression.py).
 
@@ -442,7 +442,7 @@ async def test_general_introduction_request_with_existing_booking_context(temp_d
 
     Verifies:
     1. Returns a comprehensive KrishiBazaar introduction/overview explaining how it helps farmers.
-    2. Does NOT return 'âœ… **Your Booking is Confirmed:**' or booking details as primary response.
+    2. Does NOT return '✅ **Your Booking is Confirmed:**' or booking details as primary response.
     3. Does NOT send the repetitive onboarding form question.
     4. Confirmed booking record remains safe and unaltered in database.
     """
@@ -510,7 +510,7 @@ async def test_general_introduction_request_with_existing_booking_context(temp_d
         assert "Net Return" in reply_text
 
         # Must NOT return stale booking confirmation
-        assert "âœ… **Your Booking is Confirmed:**" not in reply_text
+        assert "✅ **Your Booking is Confirmed:**" not in reply_text
         assert "Destination Channel:" not in reply_text
         assert "Estimated Net Payout:" not in reply_text
 
@@ -633,7 +633,7 @@ async def test_explicit_new_crop_inquiry_when_prior_booking_exists(temp_db: Stor
         await handle_chat_message(mock_ctx, farmer_sender, msg_same_crop)
         reply_same = mock_ctx.send.call_args_list[1][0][1].content[0].text
         # Must NOT return stale booking confirmation
-        assert f"âœ… **Your Booking is Confirmed:** `{prior_booking_id}`" not in reply_same
+        assert f"✅ **Your Booking is Confirmed:** `{prior_booking_id}`" not in reply_same
         # Should process as fresh market / selling inquiry
         assert "Onion" in reply_same
         assert "100" in reply_same
@@ -646,7 +646,7 @@ async def test_explicit_new_crop_inquiry_when_prior_booking_exists(temp_db: Stor
         )
         await handle_chat_message(mock_ctx, farmer_sender, msg_diff_crop)
         reply_diff = mock_ctx.send.call_args_list[1][0][1].content[0].text
-        assert f"âœ… **Your Booking is Confirmed:** `{prior_booking_id}`" not in reply_diff
+        assert f"✅ **Your Booking is Confirmed:** `{prior_booking_id}`" not in reply_diff
         assert "Potato" in reply_diff
         assert "75" in reply_diff
 

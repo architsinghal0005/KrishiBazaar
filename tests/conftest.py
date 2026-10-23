@@ -1,4 +1,4 @@
-﻿"""
+"""
 KrishiBazaar Pytest Suite Configuration.
 Ensures comprehensive storage isolation so no test run ever pollutes or alters the production database.
 """
@@ -18,4 +18,6 @@ def isolate_test_storage(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     test_storage = StorageEngine(db_path=test_db_file)
     monkeypatch.setattr("krishibazaar.storage.storage", test_storage)
     monkeypatch.setattr("krishibazaar.agents.orchestrator.storage", test_storage)
+    monkeypatch.setattr("krishibazaar.config.settings.enable_payment_protocol", False)
     yield test_storage
+

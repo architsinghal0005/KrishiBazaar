@@ -1,4 +1,4 @@
-﻿"""
+"""
 Structured Intent Extraction Service using the ASI:One Developer API.
 Converts a farmer's natural-language inquiry into validated Pydantic models.
 Gracefully handles missing credentials, network timeouts, malformed JSON, and rate limits.
@@ -38,32 +38,50 @@ KNOWN_CROPS = {
     "onion": "onion",
     "onions": "onion",
     "pyaz": "onion",
+    "pyaaz": "onion",
     "kanda": "onion",
+    "प्याज": "onion",
+    "प्याज़": "onion",
+    "कांदा": "onion",
     "tomato": "tomato",
     "tomatoes": "tomato",
     "tamatar": "tomato",
+    "टमाटर": "tomato",
     "potato": "potato",
     "potatoes": "potato",
     "aloo": "potato",
     "batata": "potato",
+    "आलू": "potato",
+    "बटाटा": "potato",
     "wheat": "wheat",
     "gehu": "wheat",
+    "गेहूं": "wheat",
+    "गेहू": "wheat",
     "soybean": "soybean",
     "soya": "soybean",
+    "सोयाबीन": "soybean",
+    "सोया": "soybean",
     "mustard": "mustard",
     "sarson": "mustard",
+    "सरसों": "mustard",
     "cotton": "cotton",
     "kapas": "cotton",
+    "कपास": "cotton",
     "rice": "rice",
     "paddy": "rice",
     "dhaan": "rice",
+    "चावल": "rice",
+    "धान": "rice",
     "maize": "maize",
     "makka": "maize",
     "corn": "maize",
+    "मक्का": "maize",
     "gram": "gram",
     "chana": "gram",
+    "चना": "gram",
     "garlic": "garlic",
     "lahsun": "garlic",
+    "लहसुन": "garlic",
 }
 
 
@@ -71,30 +89,31 @@ def _extract_via_rules(text: str, source: str = "rule_based_fallback") -> Farmer
     """
     Deterministic rule-based heuristic extractor used as an offline or fallback engine.
     Ensures zero crashes when ASI:One credentials are absent or remote API is unreachable.
+    Supports English, Hinglish, Devanagari Hindi, and Rupee (₹) symbols.
     """
     text_lower = text.lower()
 
-    # 1. Detect crop
+    # 1. Detect crop (supports English and Devanagari aliases)
     detected_crop: str | None = None
     for alias, canon in KNOWN_CROPS.items():
-        if re.search(rf"\b{alias}\b", text_lower):
+        if alias in text_lower or re.search(rf"\b{re.escape(alias)}\b", text_lower):
             detected_crop = canon
             break
 
     # 2. Detect quantity in quintals
     quantity: float | None = None
-    # Check for quintals / qtl
-    qtl_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:quintals?|qtl|qtls?)\b", text_lower)
+    # Check for quintals / qtl / क्विंटल
+    qtl_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:quintals?|qtl|qtls?|क्विंटल|क्विण्टल)\b", text_lower)
     if qtl_match:
         quantity = float(qtl_match.group(1))
     else:
         # Check for tons / tonnes (1 ton = 10 quintals)
-        ton_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:tons?|tonnes?|metric tons?)\b", text_lower)
+        ton_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:tons?|tonnes?|metric tons?|टन)\b", text_lower)
         if ton_match:
             quantity = float(ton_match.group(1)) * 10.0
         else:
             # Check for kg (100 kg = 1 quintal)
-            kg_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:kg|kilograms?)\b", text_lower)
+            kg_match = re.search(r"(\d+(?:\.\d+)?)\s*(?:kg|kilograms?|किलो|किलोग्राम)\b", text_lower)
             if kg_match:
                 quantity = float(kg_match.group(1)) / 100.0
 
@@ -109,11 +128,36 @@ def _extract_via_rules(text: str, source: str = "rule_based_fallback") -> Farmer
         # Avoid false positives like "in 2 days" or "in bulk"
         if not re.search(r"\b(days?|hours?|bulk|advance|cash|transit)\b", candidate.lower()):
             origin = candidate.title()
+    if not origin:
+        # Direct location check fallback (supports English and Devanagari Hindi)
+        HINDI_DISTRICTS = {
+            "नासिक": "Nashik",
+            "पुणे": "Pune",
+            "इंदौर": "Indore",
+            "इन्दौर": "Indore",
+            "खन्ना": "Khanna",
+            "सोलापुर": "Solapur",
+            "लातूर": "Latur",
+            "राजकोट": "Rajkot",
+            "आगरा": "Agra",
+            "दिल्ली": "Delhi",
+        }
+        for h_loc, en_loc in HINDI_DISTRICTS.items():
+            if h_loc in text:
+                origin = en_loc
+                break
 
-    # 4. Detect minimum net return in INR
+    if not origin:
+        from krishibazaar.services.weather_service import LOCATION_COORDINATES
+        for loc_key in LOCATION_COORDINATES:
+            if loc_key in text_lower:
+                origin = loc_key.title()
+                break
+
+    # 4. Detect minimum net return in INR / ₹
     min_return: float | None = None
     money_match = re.search(
-        r"(?:inr|rs\.?|rupees?|at least|minimum)\s*(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:net|inr|rs)?\b",
+        r"(?:₹|inr|rs\.?|rupees?|रुपये|रुपए|at least|minimum)\s*(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:net|inr|rs|₹|रुपये)?",
         text_lower,
     )
     if money_match:
@@ -121,7 +165,7 @@ def _extract_via_rules(text: str, source: str = "rule_based_fallback") -> Farmer
         min_return = float(raw_val)
     else:
         money_match_alt = re.search(
-            r"(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:inr|rs\.?|rupees?)\s*(?:net)?\b",
+            r"(\d+(?:,\d+)*(?:\.\d+)?)\s*(?:₹|inr|rs\.?|rupees?|रुपये|रुपए)\s*(?:net)?",
             text_lower,
         )
         if money_match_alt:

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Mandi Price Service for KrishiBazaar.
 Integrates with the official Indian Open Government Data (data.gov.in / AGMARKNET)
 daily mandi price dataset (Resource ID: 9ef84268-d588-465a-a308-a864a43d0070).
@@ -492,7 +492,7 @@ def validate_mandi_price(
 ) -> tuple[bool, str | None]:
     """
     Validate commodity price for sanity, unit mismatch, or clerical entry errors.
-    Flags modal prices < â‚¹100/quintal as suspicious (such as â‚¹13 or â‚¹15 per quintal,
+    Flags modal prices < ₹100/quintal as suspicious (such as ₹13 or ₹15 per quintal,
     which in APMCs are clerical errors, unit mismatch for bundle/bunch, or per-kg typos).
     Returns (is_suspicious: bool, suspicion_reason: str | None).
     """

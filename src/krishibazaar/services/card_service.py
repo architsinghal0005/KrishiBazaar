@@ -1,4 +1,4 @@
-﻿"""
+"""
 Interactive Card Service for KrishiBazaar (Phase 7).
 Provides structured, interactive presentation of farmer requests, ranked selling channels,
 itemized booking proposals, and confirmation audit records using the official ASI:One / Agentverse
@@ -155,8 +155,8 @@ def build_channel_recommendations_card(opt: OptimizationResult) -> MetadataConte
         secondary_text = (
             f"Gross: INR {option.offered_price_per_quintal:,.0f}/qtl | "
             f"Freight: INR {transport_cost:,.0f} | "
-            f"Fees: INR {statutory_fees:,.0f} | "
-            f"Risk: INR {weather_loss:,.0f} | "
+           f"Market charges (cess/hamali): INR {statutory_fees:,.0f} | "
+f"Estimated weather loss: INR {weather_loss:,.0f} | "
             f"Source: {source_name} ({freshness}) | {mandi_clarification}"
         )
 
@@ -278,10 +278,13 @@ def build_proposal_review_card(proposal: BookingProposal) -> MetadataContent:
 def build_booking_confirmed_card(
     booking: BookingRecord,
     payment_enabled: bool | None = None,
+    payment_record: PaymentRecord | None = None,
 ) -> MetadataContent:
     """
     Construct a DetailCard confirming a successfully recorded simulated booking record.
     Includes tracking reference, destination, scheduled pickup, and post-booking payment step.
+    Distinguishes booking confirmation from payment settlement and disables payment review
+    if a payment is already in progress or settled.
     """
     from krishibazaar.config import settings
     from krishibazaar.services.payment_service import (
@@ -290,6 +293,13 @@ def build_booking_confirmed_card(
     )
 
     is_pay_enabled = settings.enable_payment_protocol if payment_enabled is None else payment_enabled
+
+    if payment_record is None:
+        try:
+            from krishibazaar.storage import storage
+            payment_record = storage.get_payment_record_by_inquiry(booking.booking_id)
+        except Exception:
+            payment_record = None
 
     tracking = (
         getattr(booking, "tracking_token", None)
@@ -318,7 +328,7 @@ def build_booking_confirmed_card(
     total_ded = round(trans + other, 2)
 
     rows = [
-        DetailSummaryRow(label="Audit Status", value="CONFIRMED (SIMULATED RECORD)"),
+        DetailSummaryRow(label="Audit Status", value="CONFIRMED (SIMULATED — NOT A REAL BOOKING)"),
         DetailSummaryRow(label="Booking Reference", value=booking.booking_id),
         DetailSummaryRow(label="Tracking Number", value=tracking),
         DetailSummaryRow(
@@ -344,11 +354,63 @@ def build_booking_confirmed_card(
         DetailSummaryRow(label="Scheduled Pickup Date", value=pickup),
         DetailSummaryRow(
             label="Simulation Notice",
-            value="Simulated transaction record. No real funds debited, no physical transport dispatched.",
+            value="SIMULATED — NOT A REAL BOOKING: No real funds debited, no physical transport dispatched.",
         ),
     ]
 
-    if not is_pay_enabled:
+    is_in_progress = (
+        payment_record is not None
+        and payment_record.status in (
+            PaymentStatus.SUBMITTING,
+            PaymentStatus.COMMITTED,
+            PaymentStatus.PENDING_SETTLEMENT,
+            PaymentStatus.AWAITING_RECONCILIATION,
+        )
+    )
+    is_settled = (
+        payment_record is not None
+        and payment_record.status == PaymentStatus.SETTLED
+    )
+
+    if is_settled:
+        rows.append(DetailSummaryRow(label="Payment Status", value="SETTLED (Verified on Dorado Testnet)"))
+        rows.append(DetailSummaryRow(label="Payment Reference", value=payment_record.payment_reference))
+        if payment_record.tx_hash:
+            rows.append(DetailSummaryRow(label="Transaction Hash", value=payment_record.tx_hash))
+        ctas = [
+            CtaAction(
+                label="Check Booking Status",
+                selection={"action": "status_lookup", "booking_id": booking.booking_id},
+                primary=True,
+            ),
+            CtaAction(
+                label="View Payment Receipt",
+                selection={"action": "payment_status_lookup", "reference": payment_record.payment_reference},
+            ),
+        ]
+    elif is_in_progress:
+        rows.append(DetailSummaryRow(label="Payment Status", value=f"{payment_record.status.value} (Payment In Progress)"))
+        rows.append(DetailSummaryRow(label="Payment Reference", value=payment_record.payment_reference))
+        if payment_record.tx_hash:
+            rows.append(DetailSummaryRow(label="Transaction Hash", value=payment_record.tx_hash))
+        rows.append(
+            DetailSummaryRow(
+                label="Payment Notice",
+                value="Transaction is in progress / awaiting on-chain reconciliation. Payment review is disabled.",
+            )
+        )
+        ctas = [
+            CtaAction(
+                label="Check Booking Status",
+                selection={"action": "status_lookup", "booking_id": booking.booking_id},
+                primary=True,
+            ),
+            CtaAction(
+                label="Payment In Progress (Review Disabled)",
+                selection={"action": "payment_status_lookup", "reference": payment_record.payment_reference},
+            ),
+        ]
+    elif not is_pay_enabled:
         rows.append(DetailSummaryRow(label="Payment Status", value="DISABLED"))
         rows.append(
             DetailSummaryRow(
@@ -379,12 +441,23 @@ def build_booking_confirmed_card(
         net_display = f"Fetch.ai {settings.payment_testnet_chain_id.title()} Testnet ({settings.payment_testnet_chain_id})"
         est_fee = "~0.0004 atestfet (standard testnet gas fee)"
 
-        rows.append(DetailSummaryRow(label="Payment Status", value="READY FOR OPTIONAL TEST PAYMENT"))
+        if payment_record and payment_record.status in (PaymentStatus.REQUESTED, PaymentStatus.AWAITING_AUTHORIZATION):
+            rows.append(DetailSummaryRow(label="Payment Status", value="AWAITING AUTHORIZATION (Review Pending)"))
+            rows.append(DetailSummaryRow(label="Payment Reference", value=payment_record.payment_reference))
+            pay_ref_param = payment_record.payment_reference
+        else:
+            rows.append(DetailSummaryRow(label="Payment Status", value="READY FOR OPTIONAL TEST PAYMENT"))
+            pay_ref_param = None
+
         rows.append(DetailSummaryRow(label="Payment Purpose", value="Platform Advisory Fee (Optional Testnet Verification)"))
         rows.append(DetailSummaryRow(label="Payment Amount", value=amt_display))
         rows.append(DetailSummaryRow(label="Recipient (Masked)", value=masked_payee))
         rows.append(DetailSummaryRow(label="Network / Environment", value=net_display))
         rows.append(DetailSummaryRow(label="Estimated Network Fee", value=est_fee))
+
+        review_sel = {"action": "request_payment_review", "booking_id": booking.booking_id}
+        if pay_ref_param:
+            review_sel["reference"] = pay_ref_param
 
         ctas = [
             CtaAction(
@@ -393,13 +466,13 @@ def build_booking_confirmed_card(
             ),
             CtaAction(
                 label="Proceed to Payment Review",
-                selection={"action": "request_payment_review", "booking_id": booking.booking_id},
+                selection=review_sel,
                 primary=True,
             ),
         ]
 
     payload = DetailCardPayload(
-        title=f"Booking Confirmed: {booking.booking_id}",
+        title=f"Booking Confirmed: {booking.booking_id} (SIMULATED — NOT A REAL BOOKING)",
         summary_rows=rows,
         ctas=ctas,
     )
@@ -409,11 +482,13 @@ def build_booking_confirmed_card(
 def build_payment_option_card(
     booking: BookingRecord,
     payment_enabled: bool | None = None,
+    payment_record: PaymentRecord | None = None,
 ) -> MetadataContent:
     """
     Construct a dedicated DetailCard for the post-booking Payment Option step.
     Displays booking reference, payment status, amount/currency, masked recipient,
     network, estimated network fee, and Pay/Test Payment action.
+    Disables the review button if a payment request is already in progress.
     """
     from krishibazaar.config import settings
     from krishibazaar.services.payment_service import (
@@ -422,6 +497,14 @@ def build_payment_option_card(
     )
 
     is_pay_enabled = settings.enable_payment_protocol if payment_enabled is None else payment_enabled
+
+    if payment_record is None:
+        try:
+            from krishibazaar.storage import storage
+            payment_record = storage.get_payment_record_by_inquiry(booking.booking_id)
+        except Exception:
+            payment_record = None
+
     fee_base = settings.payment_advisory_fee_base_units
     denom = settings.payment_testnet_denom
     amt_display = format_token_amount_display(fee_base, denom)
@@ -430,7 +513,68 @@ def build_payment_option_card(
     net_display = f"Fetch.ai {settings.payment_testnet_chain_id.title()} Testnet ({settings.payment_testnet_chain_id})"
     est_fee = "~0.0004 atestfet"
 
-    if not is_pay_enabled:
+    is_in_progress = (
+        payment_record is not None
+        and payment_record.status in (
+            PaymentStatus.SUBMITTING,
+            PaymentStatus.COMMITTED,
+            PaymentStatus.PENDING_SETTLEMENT,
+            PaymentStatus.AWAITING_RECONCILIATION,
+        )
+    )
+    is_settled = (
+        payment_record is not None
+        and payment_record.status == PaymentStatus.SETTLED
+    )
+
+    if is_settled:
+        rows = [
+            DetailSummaryRow(label="Booking Reference", value=booking.booking_id),
+            DetailSummaryRow(label="Payment Status", value="SETTLED (Verified on Dorado Testnet)"),
+            DetailSummaryRow(label="Payment Reference", value=payment_record.payment_reference),
+            DetailSummaryRow(label="Transaction Hash", value=payment_record.tx_hash or "Confirmed"),
+            DetailSummaryRow(
+                label="Produce Proceeds Notice",
+                value=f"Crop proceeds of INR {booking.net_payout:,.2f} are simulated mandi sales, not funds received.",
+            ),
+        ]
+        ctas = [
+            CtaAction(
+                label="Check Booking Status",
+                selection={"action": "status_lookup", "booking_id": booking.booking_id},
+                primary=True,
+            ),
+            CtaAction(
+                label="View Payment Receipt",
+                selection={"action": "payment_status_lookup", "reference": payment_record.payment_reference},
+            ),
+        ]
+    elif is_in_progress:
+        rows = [
+            DetailSummaryRow(label="Booking Reference", value=booking.booking_id),
+            DetailSummaryRow(label="Payment Status", value=f"{payment_record.status.value} (Payment In Progress)"),
+            DetailSummaryRow(label="Payment Reference", value=payment_record.payment_reference),
+            DetailSummaryRow(
+                label="Payment Notice",
+                value="Transaction is in progress / awaiting on-chain reconciliation. Payment review is disabled.",
+            ),
+            DetailSummaryRow(
+                label="Produce Proceeds Notice",
+                value=f"Crop proceeds of INR {booking.net_payout:,.2f} are simulated mandi sales, not funds received.",
+            ),
+        ]
+        ctas = [
+            CtaAction(
+                label="Check Booking Status",
+                selection={"action": "status_lookup", "booking_id": booking.booking_id},
+                primary=True,
+            ),
+            CtaAction(
+                label="Payment In Progress (Review Disabled)",
+                selection={"action": "payment_status_lookup", "reference": payment_record.payment_reference},
+            ),
+        ]
+    elif not is_pay_enabled:
         rows = [
             DetailSummaryRow(label="Booking Reference", value=booking.booking_id),
             DetailSummaryRow(label="Payment Status", value="DISABLED"),
@@ -464,10 +608,14 @@ def build_payment_option_card(
                 value=f"Crop proceeds of INR {booking.net_payout:,.2f} are simulated mandi sales, not funds received.",
             ),
         ]
+        review_sel = {"action": "request_payment_review", "booking_id": booking.booking_id}
+        if payment_record and payment_record.status in (PaymentStatus.REQUESTED, PaymentStatus.AWAITING_AUTHORIZATION):
+            review_sel["reference"] = payment_record.payment_reference
+
         ctas = [
             CtaAction(
                 label="Proceed to Payment Review",
-                selection={"action": "request_payment_review", "booking_id": booking.booking_id},
+                selection=review_sel,
                 primary=True,
             ),
             CtaAction(
@@ -909,15 +1057,15 @@ def build_payment_readiness_card(
             exp = now_utc
 
         if now_utc > exp:
-            status_val = "âš ï¸ EXPIRED (15-min validity window elapsed)"
+            status_val = "⚠️ EXPIRED (15-min validity window elapsed)"
         elif proposal.is_consumed:
-            status_val = "â„¹ï¸ CONSUMED / SUPERSEDED"
+            status_val = "ℹ️ CONSUMED / SUPERSEDED"
         else:
-            status_val = "ðŸŸ¢ ACTIVE & VALID (Within 15-min window)"
+            status_val = "🟢 ACTIVE & VALID (Within 15-min window)"
         rows.append(DetailSummaryRow(label="Proposal Status", value=status_val))
     elif proposal_id:
         rows.append(DetailSummaryRow(label="Proposal Reference", value=proposal_id))
-        rows.append(DetailSummaryRow(label="Proposal Status", value="âš ï¸ NOT FOUND in storage"))
+        rows.append(DetailSummaryRow(label="Proposal Status", value="⚠️ NOT FOUND in storage"))
     else:
         rows.append(DetailSummaryRow(label="Proposal Reference", value="None specified"))
 
@@ -937,13 +1085,13 @@ def build_payment_readiness_card(
     rows.append(
         DetailSummaryRow(
             label="Payment Protocol",
-            value="ðŸŸ¢ Enabled (Testnet)" if payment_enabled else "ðŸ”´ Disabled (ENABLE_PAYMENT_PROTOCOL=False)",
+            value="🟢 Enabled (Testnet)" if payment_enabled else "🔴 Disabled (ENABLE_PAYMENT_PROTOCOL=False)",
         )
     )
     rows.append(
         DetailSummaryRow(
             label="Dry-Run Status",
-            value="âœ… Supported (Non-executing audit)",
+            value="✅ Supported (Non-executing audit)",
         )
     )
 
@@ -1024,12 +1172,12 @@ def build_booking_payment_audit_card(
     ]
 
     if booking:
-        rows.append(DetailSummaryRow(label="Booking Status", value=f"âœ… {booking.status}"))
+        rows.append(DetailSummaryRow(label="Booking Status", value=f"✅ {booking.status}"))
         rows.append(DetailSummaryRow(label="Produce", value=f"{booking.quantity_quintals:g} qtl {booking.crop} to {booking.channel_name}"))
         rows.append(DetailSummaryRow(label="Agreed Net Payout", value=f"INR {booking.net_payout:,.2f}"))
         rows.append(DetailSummaryRow(label="Transit Date", value=str(booking.pickup_date)))
     else:
-        rows.append(DetailSummaryRow(label="Booking Status", value="âš ï¸ NOT FOUND in storage"))
+        rows.append(DetailSummaryRow(label="Booking Status", value="⚠️ NOT FOUND in storage"))
 
     if payment_record:
         from krishibazaar.services.payment_service import mask_address
@@ -1042,14 +1190,14 @@ def build_booking_payment_audit_card(
     rows.append(
         DetailSummaryRow(
             label="Payment Protocol",
-            value="ðŸŸ¢ Enabled (Testnet)" if payment_enabled else "ðŸ”´ Disabled (ENABLE_PAYMENT_PROTOCOL=False)",
+            value="🟢 Enabled (Testnet)" if payment_enabled else "🔴 Disabled (ENABLE_PAYMENT_PROTOCOL=False)",
         )
     )
-    rows.append(DetailSummaryRow(label="Dry-Run Status", value="âœ… Supported (Non-executing audit)"))
+    rows.append(DetailSummaryRow(label="Dry-Run Status", value="✅ Supported (Non-executing audit)"))
     if not payment_record or payment_record.status != PaymentStatus.SETTLED:
-        rows.append(DetailSummaryRow(label="Transaction Status", value="ðŸ”’ No transaction initiated"))
+        rows.append(DetailSummaryRow(label="Transaction Status", value="🔒 No transaction initiated"))
     else:
-        rows.append(DetailSummaryRow(label="Transaction Status", value="âœ… Settled on testnet"))
+        rows.append(DetailSummaryRow(label="Transaction Status", value="✅ Settled on testnet"))
 
     ctas = [
         CtaAction(

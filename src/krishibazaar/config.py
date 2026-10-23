@@ -1,4 +1,4 @@
-﻿"""
+"""
 Configuration module for KrishiBazaar.
 Loads configuration from environment variables or .env file with strict Pydantic validation.
 """
@@ -27,7 +27,7 @@ def find_env_file() -> Path | None:
 # Load .env if discovered
 _env_path = find_env_file()
 if _env_path:
-    load_dotenv(dotenv_path=_env_path)
+    load_dotenv(dotenv_path=_env_path, override=True)
 
 # Project root directory containing repository root (.env or pyproject.toml)
 PROJECT_ROOT: Path = _env_path.parent if _env_path else Path(__file__).resolve().parents[2]
@@ -244,6 +244,9 @@ class Settings(BaseModel):
     @classmethod
     def load_from_env(cls) -> Settings:
         """Construct Settings instance directly from environment variables."""
+        env_file = find_env_file()
+        if env_file:
+            load_dotenv(dotenv_path=env_file, override=True)
         return cls(
             environment=os.getenv("ENVIRONMENT", "development"),  # type: ignore[arg-type]
             log_level=os.getenv("LOG_LEVEL", "INFO").upper(),  # type: ignore[arg-type]
@@ -321,7 +324,13 @@ class Settings(BaseModel):
         )
 
 
-
-
 # Global settings singleton
 settings = Settings.load_from_env()
+
+
+def reload_settings() -> Settings:
+    """Reload global settings singleton from environment / .env file."""
+    global settings
+    settings = Settings.load_from_env()
+    return settings
+

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Fetch.ai Agent Payment Protocol Subsystem for KrishiBazaar (Phase 9B).
 
 Implements the official Fetch.ai Agent Payment Protocol (uagents-core contrib protocol)
@@ -228,55 +228,55 @@ def format_payment_status(record: PaymentRecord, payment_enabled: bool = False) 
     status_str = record.status.value if hasattr(record.status, "value") else str(record.status)
 
     lines = [
-        "ðŸ’³ **KrishiBazaar: Payment Status Report**",
+        "💳 **KrishiBazaar: Payment Status Report**",
         "",
-        f"â€¢ **Payment Reference:** `{record.payment_reference}`",
-        f"â€¢ **Service Purpose:** {record.purpose}",
-        f"â€¢ **Amount & Currency:** {record.amount_display} ({record.amount_base_units:,} {record.currency})",
-        f"â€¢ **Recipient Wallet (Masked):** `{masked_rec}`",
-        f"â€¢ **Network / Environment:** {record.network} (Fetch.ai Dorado Testnet)",
+        f"• **Payment Reference:** `{record.payment_reference}`",
+        f"• **Service Purpose:** {record.purpose}",
+        f"• **Amount & Currency:** {record.amount_display} ({record.amount_base_units:,} {record.currency})",
+        f"• **Recipient Wallet (Masked):** `{masked_rec}`",
+        f"• **Network / Environment:** {record.network} (Fetch.ai Dorado Testnet)",
     ]
 
     if not payment_enabled and status_str != "SETTLED":
-        lines.append("â€¢ **Payment Protocol:** Disabled (`ENABLE_PAYMENT_PROTOCOL=false`). No transfer has been initiated.")
+        lines.append("• **Payment Protocol:** Disabled (`ENABLE_PAYMENT_PROTOCOL=false`). No transfer has been initiated.")
     elif status_str == "SETTLED":
-        lines.append(f"â€¢ **Status:** âœ… **SETTLED** (Cryptographically verified on Dorado testnet)")
+        lines.append(f"• **Status:** ✅ **SETTLED** (Cryptographically verified on Dorado testnet)")
         if record.tx_hash:
-            lines.append(f"â€¢ **Transaction Hash:** `{record.tx_hash}`")
+            lines.append(f"• **Transaction Hash:** `{record.tx_hash}`")
         if record.tx_height:
-            lines.append(f"â€¢ **Block Height:** {record.tx_height}")
+            lines.append(f"• **Block Height:** {record.tx_height}")
         if record.actual_fee_display:
-            lines.append(f"â€¢ **Actual Fee:** {record.actual_fee_display}")
+            lines.append(f"• **Actual Fee:** {record.actual_fee_display}")
         elif record.actual_fee_base_units:
-            lines.append(f"â€¢ **Actual Fee:** {format_token_amount_display(record.actual_fee_base_units, record.currency)}")
+            lines.append(f"• **Actual Fee:** {format_token_amount_display(record.actual_fee_base_units, record.currency)}")
         if record.verified_at_utc:
-            lines.append(f"â€¢ **Settled At (UTC):** {record.verified_at_utc}")
+            lines.append(f"• **Settled At (UTC):** {record.verified_at_utc}")
     elif status_str == "SUBMITTING":
-        lines.append("â€¢ **Status:** â³ **SUBMITTING** â€” Broadcasting transaction to Fetch.ai Dorado testnet.")
+        lines.append("• **Status:** ⏳ **SUBMITTING** — Broadcasting transaction to Fetch.ai Dorado testnet.")
     elif status_str in ("COMMITTED", "PENDING_SETTLEMENT"):
-        lines.append(f"â€¢ **Status:** â³ **{status_str}** â€” Transaction broadcast. Awaiting ledger finality.")
+        lines.append(f"• **Status:** ⏳ **{status_str}** — Transaction broadcast. Awaiting ledger finality.")
         if record.tx_hash:
-            lines.append(f"â€¢ **Transaction Hash:** `{record.tx_hash}`")
+            lines.append(f"• **Transaction Hash:** `{record.tx_hash}`")
     elif status_str == "AWAITING_RECONCILIATION":
-        lines.append("â€¢ **Status:** â³ **AWAITING_RECONCILIATION** â€” Transaction broadcast, awaiting confirmation.")
+        lines.append("• **Status:** ⏳ **AWAITING_RECONCILIATION** — Transaction broadcast, awaiting confirmation.")
         if record.tx_hash:
-            lines.append(f"â€¢ **Transaction Hash:** `{record.tx_hash}`")
+            lines.append(f"• **Transaction Hash:** `{record.tx_hash}`")
     elif status_str in ("REQUESTED", "AWAITING_AUTHORIZATION"):
-        lines.append(f"â€¢ **Status:** â³ **{status_str}** â€” Awaiting human authorization. No tokens debited.")
+        lines.append(f"• **Status:** ⏳ **{status_str}** — Awaiting human authorization. No tokens debited.")
         if payment_enabled:
-            lines.append(f"â€¢ **Action Required:** Click **'Proceed to Payment Review'** or reply *\"Pay advisory fee\"* to review.")
+            lines.append(f"• **Action Required:** Click **'Proceed to Payment Review'** or reply *\"Pay advisory fee\"* to review.")
     elif status_str == "CANCELLED":
-        lines.append(f"â€¢ **Status:** âŒ **CANCELLED** ({record.cancellation_reason or 'No tokens debited'})")
+        lines.append(f"• **Status:** ❌ **CANCELLED** ({record.cancellation_reason or 'No tokens debited'})")
     elif status_str == "REJECTED":
-        lines.append(f"â€¢ **Status:** ðŸ›‘ **REJECTED** ({record.rejection_reason or 'Declined by farmer'})")
+        lines.append(f"• **Status:** 🛑 **REJECTED** ({record.rejection_reason or 'Declined by farmer'})")
     else:
-        lines.append(f"â€¢ **Status:** {status_str}")
+        lines.append(f"• **Status:** {status_str}")
 
     if record.service_inquiry_id:
-        lines.append(f"â€¢ **Linked Booking:** `{record.service_inquiry_id}`")
+        lines.append(f"• **Linked Booking:** `{record.service_inquiry_id}`")
 
     lines.append("")
-    lines.append("â„¹ï¸ *KrishiBazaar operates strictly on testnet micro-fees. Crop sale proceeds are simulated and separate.*")
+    lines.append("ℹ️ *KrishiBazaar operates strictly on testnet micro-fees. Crop sale proceeds are simulated and separate.*")
     return lines
 
 
@@ -295,23 +295,23 @@ def format_payment_readiness_audit(
     """
     cfg = settings_obj or settings
     lines: list[str] = [
-        "ðŸ’³ **KrishiBazaar: Proposal Payment Readiness & Subsystem Audit**",
+        "💳 **KrishiBazaar: Proposal Payment Readiness & Subsystem Audit**",
         "",
-        "ðŸ“‹ **1. Proposal Context & Validity Window:**",
+        "📋 **1. Proposal Context & Validity Window:**",
     ]
 
     now_utc = datetime.now(timezone.utc)
 
     if proposal:
-        lines.append(f"â€¢ **Proposal Reference:** `{proposal.proposal_id}`")
+        lines.append(f"• **Proposal Reference:** `{proposal.proposal_id}`")
         lines.append(
-            f"â€¢ **Produce Details:** {proposal.quantity_quintals:g} quintals {proposal.crop} "
+            f"• **Produce Details:** {proposal.quantity_quintals:g} quintals {proposal.crop} "
             f"to {proposal.destination_name} ({proposal.channel_type})"
         )
-        lines.append(f"â€¢ **Origin Location:** {proposal.origin_location}")
+        lines.append(f"• **Origin Location:** {proposal.origin_location}")
         pickup_val = getattr(proposal, "transit_date", None) or getattr(proposal, "pickup_date", "Pending")
-        lines.append(f"â€¢ **Scheduled Pickup Date:** {pickup_val}")
-        lines.append(f"â€¢ **Estimated Net Payout:** INR {proposal.estimated_net_payout:,.2f} *(Advisory estimate)*")
+        lines.append(f"• **Scheduled Pickup Date:** {pickup_val}")
+        lines.append(f"• **Estimated Net Payout:** INR {proposal.estimated_net_payout:,.2f} *(Advisory estimate)*")
 
         # Expiry check
         try:
@@ -324,90 +324,90 @@ def format_payment_readiness_audit(
         is_expired = now_utc > expires_at
         if is_expired:
             lines.append(
-                f"â€¢ **Proposal Status:** âš ï¸ **EXPIRED** (Proposal expired at `{proposal.expires_at_utc}`). "
+                f"• **Proposal Status:** ⚠️ **EXPIRED** (Proposal expired at `{proposal.expires_at_utc}`). "
                 f"Due to wholesale market rate and transport quote volatility, proposals have a 15-minute validity window. "
                 f"Expired proposals cannot be confirmed or used for payment."
             )
         elif proposal.is_consumed:
             lines.append(
-                f"â€¢ **Proposal Status:** â„¹ï¸ **CONSUMED / SUPERSEDED** (Already processed into a booking or cancelled)."
+                f"• **Proposal Status:** ℹ️ **CONSUMED / SUPERSEDED** (Already processed into a booking or cancelled)."
             )
         else:
             remaining_sec = max(0, int((expires_at - now_utc).total_seconds()))
             remaining_min = remaining_sec / 60.0
             lines.append(
-                f"â€¢ **Proposal Status:** ðŸŸ¢ **ACTIVE & VALID** (Within 15-minute validity window; ~{remaining_min:.1f} minutes remaining)."
+                f"• **Proposal Status:** 🟢 **ACTIVE & VALID** (Within 15-minute validity window; ~{remaining_min:.1f} minutes remaining)."
             )
-        lines.append(f"â€¢ **Created At (UTC):** `{proposal.created_at_utc}`")
-        lines.append(f"â€¢ **Expires At (UTC):** `{proposal.expires_at_utc}`")
+        lines.append(f"• **Created At (UTC):** `{proposal.created_at_utc}`")
+        lines.append(f"• **Expires At (UTC):** `{proposal.expires_at_utc}`")
 
     elif proposal_id:
-        lines.append(f"â€¢ **Proposal Reference:** `{proposal_id}`")
+        lines.append(f"• **Proposal Reference:** `{proposal_id}`")
         lines.append(
-            f"â€¢ **Proposal Status:** âš ï¸ **NOT FOUND** (No proposal record found with reference ID `{proposal_id}` in local storage)."
+            f"• **Proposal Status:** ⚠️ **NOT FOUND** (No proposal record found with reference ID `{proposal_id}` in local storage)."
         )
     else:
-        lines.append("â€¢ **Proposal Reference:** None specified (No active proposal in session).")
+        lines.append("• **Proposal Reference:** None specified (No active proposal in session).")
 
     lines.append("")
-    lines.append("ðŸ”’ **2. Associated Records & Ledger Isolation:**")
+    lines.append("🔒 **2. Associated Records & Ledger Isolation:**")
     if booking:
         lines.append(
-            f"â€¢ **Associated Booking Record:** âœ… `{booking.booking_id}` (Status: **{booking.status}**, "
+            f"• **Associated Booking Record:** ✅ `{booking.booking_id}` (Status: **{booking.status}**, "
             f"Net Payout: INR {booking.net_payout:,.2f})"
         )
     else:
-        lines.append("â€¢ **Associated Booking Record:** None *(Proposal has NOT been confirmed into a booking)*")
+        lines.append("• **Associated Booking Record:** None *(Proposal has NOT been confirmed into a booking)*")
 
     if payment_record:
         masked_rec = mask_address(payment_record.payee_wallet_address)
         lines.append(
-            f"â€¢ **Associated Payment Record:** `{payment_record.payment_reference}` "
+            f"• **Associated Payment Record:** `{payment_record.payment_reference}` "
             f"(Status: **{payment_record.status.value}**, Amount: {payment_record.amount_display}, Payee: `{masked_rec}`)"
         )
     else:
-        lines.append("â€¢ **Associated Payment Record:** None *(No payment transfer has been requested or initiated)*")
-    lines.append("â€¢ **Record Isolation Guard:** Active *(Historical settled payments from other bookings are never substituted)*")
+        lines.append("• **Associated Payment Record:** None *(No payment transfer has been requested or initiated)*")
+    lines.append("• **Record Isolation Guard:** Active *(Historical settled payments from other bookings are never substituted)*")
 
     lines.append("")
-    lines.append("âš™ï¸ **3. Payment Subsystem & Service Readiness:**")
-    lines.append("â€¢ **Payment Service Subsystem:** âœ… Initialized & Available (Fetch.ai Agent Payment Protocol engine loaded)")
+    lines.append("⚙️ **3. Payment Subsystem & Service Readiness:**")
+    lines.append("• **Payment Service Subsystem:** ✅ Initialized & Available (Fetch.ai Agent Payment Protocol engine loaded)")
 
     # Payment Specialist Agent configuration
     agent_addr = cfg.payment_payee_agent_address
     port = cfg.payment_agent_port
     if agent_addr:
         masked_agent = f"{agent_addr[:16]}...{agent_addr[-6:]}" if len(agent_addr) > 24 else agent_addr
-        lines.append(f"â€¢ **Payment Specialist Agent:** Configured (`{masked_agent}` on port {port}; role: authoritative payee settlement agent)")
+        lines.append(f"• **Payment Specialist Agent:** Configured (`{masked_agent}` on port {port}; role: authoritative payee settlement agent)")
     else:
-        lines.append("â€¢ **Payment Specialist Agent:** Local service fallback mode")
+        lines.append("• **Payment Specialist Agent:** Local service fallback mode")
 
     # Payment Protocol Status (ENABLE_PAYMENT_PROTOCOL)
     if cfg.enable_payment_protocol:
-        lines.append("â€¢ **Payment Protocol Execution:** ðŸŸ¢ **ENABLED** (Testnet Mode active)")
+        lines.append("• **Payment Protocol Execution:** 🟢 **ENABLED** (Testnet Mode active)")
     else:
-        lines.append("â€¢ **Payment Protocol Execution:** ðŸ”´ **DISABLED** (`ENABLE_PAYMENT_PROTOCOL=False`; real fund transfers and on-chain signing deactivated for safety)")
+        lines.append("• **Payment Protocol Execution:** 🔴 **DISABLED** (`ENABLE_PAYMENT_PROTOCOL=False`; real fund transfers and on-chain signing deactivated for safety)")
 
     # Network & Method
-    lines.append(f"â€¢ **Configured Network:** Fetch.ai Dorado Testnet (`{cfg.payment_testnet_chain_id}`, {cfg.payment_network})")
-    lines.append(f"â€¢ **Payment Method & Asset:** Direct FET transfer (`fet_direct`, denomination: `{cfg.payment_testnet_denom}`)")
+    lines.append(f"• **Configured Network:** Fetch.ai Dorado Testnet (`{cfg.payment_testnet_chain_id}`, {cfg.payment_network})")
+    lines.append(f"• **Payment Method & Asset:** Direct FET transfer (`fet_direct`, denomination: `{cfg.payment_testnet_denom}`)")
     advisory_fet = cfg.payment_advisory_fee_base_units / (10**18)
-    lines.append(f"â€¢ **Standard Advisory Fee:** {advisory_fet:g} FET ({cfg.payment_advisory_fee_base_units:,} {cfg.payment_testnet_denom})")
+    lines.append(f"• **Standard Advisory Fee:** {advisory_fet:g} FET ({cfg.payment_advisory_fee_base_units:,} {cfg.payment_testnet_denom})")
 
     payee_wallet = cfg.payment_payee_wallet_address
     if payee_wallet:
-        lines.append(f"â€¢ **Configured Payee Wallet (Masked):** `{mask_address(payee_wallet)}`")
+        lines.append(f"• **Configured Payee Wallet (Masked):** `{mask_address(payee_wallet)}`")
     if cfg.payment_testnet_rpc_url:
-        lines.append(f"â€¢ **RPC Ledger Endpoint:** `{cfg.payment_testnet_rpc_url}`")
+        lines.append(f"• **RPC Ledger Endpoint:** `{cfg.payment_testnet_rpc_url}`")
 
     lines.append("")
-    lines.append("â„¹ï¸ **4. Order of Operations, Missing Prerequisites & Dry-Run Support:**")
+    lines.append("ℹ️ **4. Order of Operations, Missing Prerequisites & Dry-Run Support:**")
     lines.append(
-        "â€¢ **Architecture Limitation:** In KrishiBazaar's farm-to-market protocol, payment requests cannot be created or authorized prior to booking confirmation. "
+        "• **Architecture Limitation:** In KrishiBazaar's farm-to-market protocol, payment requests cannot be created or authorized prior to booking confirmation. "
         "Proposals (`PROP-...`) are time-bounded advisory estimates. Payment review and on-chain settlement are generated strictly post-booking confirmation "
         "to ensure payments map 1-to-1 to committed produce bookings."
     )
-    lines.append("â€¢ **Missing Prerequisites for Payment Execution:**")
+    lines.append("• **Missing Prerequisites for Payment Execution:**")
     if not booking:
         lines.append("  1. **Booking Confirmation:** Proposal must be approved by the farmer to create an authoritative booking record (`KB-BOOK-...`).")
     else:
@@ -419,12 +419,12 @@ def format_payment_readiness_audit(
         lines.append("  2. **Protocol Activation:** Enabled.")
 
     lines.append(
-        "â€¢ **Non-Executing Dry-Run Support:** âœ… **SUPPORTED** (Configuration, agent addresses, testnet parameters, and storage schemas verified; "
+        "• **Non-Executing Dry-Run Support:** ✅ **SUPPORTED** (Configuration, agent addresses, testnet parameters, and storage schemas verified; "
         "no on-chain transactions or token transfers will be broadcast during dry-run audits)."
     )
 
     lines.append("")
-    lines.append("ðŸ‘‰ **5. Next Safe Step:**")
+    lines.append("👉 **5. Next Safe Step:**")
     if proposal and not (now_utc > expires_at) and not proposal.is_consumed:
         lines.append(
             f"To proceed safely with this proposal, reply with:\n"
@@ -460,63 +460,63 @@ def format_booking_payment_audit(
     """
     cfg = settings_obj or settings
     lines: list[str] = [
-        "ðŸ’³ **KrishiBazaar: Booking Payment Audit & Subsystem Report**",
+        "💳 **KrishiBazaar: Booking Payment Audit & Subsystem Report**",
         "",
-        "ðŸ“‹ **1. Booking Reference & Authoritative Lifecycle Status:**",
-        f"â€¢ **Booking Reference:** `{booking_id}`",
+        "📋 **1. Booking Reference & Authoritative Lifecycle Status:**",
+        f"• **Booking Reference:** `{booking_id}`",
     ]
 
     if not is_owner:
         lines.append(
-            f"â€¢ **Booking Status:** âš ï¸ **ACCESS RESTRICTED (Session Isolation)** "
-            f"â€” Booking `{booking_id}` is registered to a different farmer session."
+            f"• **Booking Status:** ⚠️ **ACCESS RESTRICTED (Session Isolation)** "
+            f"— Booking `{booking_id}` is registered to a different farmer session."
         )
     elif booking:
-        lines.append(f"â€¢ **Booking Status:** âœ… **{booking.status}** (Authoritative Local Ledger Record)")
+        lines.append(f"• **Booking Status:** ✅ **{booking.status}** (Authoritative Local Ledger Record)")
         lines.append(
-            f"â€¢ **Produce Details:** {booking.quantity_quintals:g} quintals {booking.crop} "
+            f"• **Produce Details:** {booking.quantity_quintals:g} quintals {booking.crop} "
             f"to {booking.channel_name}"
         )
-        lines.append(f"â€¢ **Scheduled Pickup / Transit Date:** {booking.pickup_date}")
+        lines.append(f"• **Scheduled Pickup / Transit Date:** {booking.pickup_date}")
         lines.append(
-            f"â€¢ **Agreed Net Payout:** INR {booking.net_payout:,.2f} "
+            f"• **Agreed Net Payout:** INR {booking.net_payout:,.2f} "
             f"*(Gross: INR {booking.gross_revenue:,.2f}, Transport: INR {booking.transport_cost:,.2f})*"
         )
-        lines.append(f"â€¢ **Transport Provider:** {booking.transporter_name}")
-        lines.append(f"â€¢ **Confirmed At (UTC):** `{booking.timestamp_utc}`")
+        lines.append(f"• **Transport Provider:** {booking.transporter_name}")
+        lines.append(f"• **Confirmed At (UTC):** `{booking.timestamp_utc}`")
         if booking.tracking_token:
-            lines.append(f"â€¢ **Tracking Token:** `{booking.tracking_token}`")
+            lines.append(f"• **Tracking Token:** `{booking.tracking_token}`")
         if booking.notes:
-            lines.append(f"â€¢ **Ledger Notes:** {booking.notes}")
+            lines.append(f"• **Ledger Notes:** {booking.notes}")
     else:
         lines.append(
-            f"â€¢ **Booking Status:** âš ï¸ **NOT FOUND** (No booking record found for reference `{booking_id}` in local database. "
+            f"• **Booking Status:** ⚠️ **NOT FOUND** (No booking record found for reference `{booking_id}` in local database. "
             f"Please verify that this booking reference was created in this environment)."
         )
 
     lines.append("")
-    lines.append("ðŸ”’ **2. Associated Records & Ledger Isolation:**")
+    lines.append("🔒 **2. Associated Records & Ledger Isolation:**")
     if not is_owner:
-        lines.append("â€¢ **Associated Payment Record:** Restricted by session ownership guard.")
+        lines.append("• **Associated Payment Record:** Restricted by session ownership guard.")
     elif payment_record:
         masked_rec = mask_address(payment_record.payee_wallet_address)
         lines.append(
-            f"â€¢ **Associated Payment Record:** `{payment_record.payment_reference}` "
+            f"• **Associated Payment Record:** `{payment_record.payment_reference}` "
             f"(Status: **{payment_record.status.value}**, Amount: {payment_record.amount_display}, Payee: `{masked_rec}`)"
         )
         if payment_record.tx_hash:
-            lines.append(f"â€¢ **Transaction Hash:** `{payment_record.tx_hash}`")
+            lines.append(f"• **Transaction Hash:** `{payment_record.tx_hash}`")
         if payment_record.tx_height:
-            lines.append(f"â€¢ **Block Height:** {payment_record.tx_height}")
+            lines.append(f"• **Block Height:** {payment_record.tx_height}")
     else:
-        lines.append("â€¢ **Associated Payment Record:** None")
+        lines.append("• **Associated Payment Record:** None")
         lines.append(f"  No payment record found for booking `{booking_id}`.")
         lines.append(f"  *(No payment record found for booking {booking_id})*")
-    lines.append("â€¢ **Record Isolation Guard:** Active *(Historical settled payments from other bookings are never substituted)*")
+    lines.append("• **Record Isolation Guard:** Active *(Historical settled payments from other bookings are never substituted)*")
 
     lines.append("")
-    lines.append("âš™ï¸ **3. Payment Subsystem & Service Readiness:**")
-    lines.append("â€¢ **Payment Service Subsystem:** âœ… Initialized & Available (Fetch.ai Agent Payment Protocol engine loaded)")
+    lines.append("⚙️ **3. Payment Subsystem & Service Readiness:**")
+    lines.append("• **Payment Service Subsystem:** ✅ Initialized & Available (Fetch.ai Agent Payment Protocol engine loaded)")
 
     # Payment Specialist Agent configuration
     agent_addr = cfg.payment_payee_agent_address
@@ -524,37 +524,37 @@ def format_booking_payment_audit(
     if agent_addr:
         masked_agent = f"{agent_addr[:16]}...{agent_addr[-6:]}" if len(agent_addr) > 24 else agent_addr
         lines.append(
-            f"â€¢ **Payment Specialist Agent:** Configured (`{masked_agent}` on port {port}; role: authoritative payee settlement agent; "
+            f"• **Payment Specialist Agent:** Configured (`{masked_agent}` on port {port}; role: authoritative payee settlement agent; "
             f"*Reachability notice: Active network reachability requires a live heartbeat ping*)"
         )
     else:
-        lines.append("â€¢ **Payment Specialist Agent:** Local service fallback mode")
+        lines.append("• **Payment Specialist Agent:** Local service fallback mode")
 
     # Payment Protocol Status (ENABLE_PAYMENT_PROTOCOL)
     if cfg.enable_payment_protocol:
-        lines.append("â€¢ **Payment Protocol Execution:** ðŸŸ¢ **ENABLED** (Testnet Mode active)")
+        lines.append("• **Payment Protocol Execution:** 🟢 **ENABLED** (Testnet Mode active)")
     else:
-        lines.append("â€¢ **Payment Protocol Execution:** ðŸ”´ **DISABLED** (`ENABLE_PAYMENT_PROTOCOL=False`; real fund transfers and on-chain signing deactivated for safety)")
+        lines.append("• **Payment Protocol Execution:** 🔴 **DISABLED** (`ENABLE_PAYMENT_PROTOCOL=False`; real fund transfers and on-chain signing deactivated for safety)")
 
     # Network & Method
-    lines.append(f"â€¢ **Configured Network:** Fetch.ai Dorado Testnet (`{cfg.payment_testnet_chain_id}`, {cfg.payment_network})")
-    lines.append(f"â€¢ **Payment Method & Asset:** Direct FET transfer (`fet_direct`, denomination: `{cfg.payment_testnet_denom}`)")
+    lines.append(f"• **Configured Network:** Fetch.ai Dorado Testnet (`{cfg.payment_testnet_chain_id}`, {cfg.payment_network})")
+    lines.append(f"• **Payment Method & Asset:** Direct FET transfer (`fet_direct`, denomination: `{cfg.payment_testnet_denom}`)")
     advisory_fet = cfg.payment_advisory_fee_base_units / (10**18)
-    lines.append(f"â€¢ **Standard Advisory Fee:** {advisory_fet:g} FET ({cfg.payment_advisory_fee_base_units:,} {cfg.payment_testnet_denom})")
+    lines.append(f"• **Standard Advisory Fee:** {advisory_fet:g} FET ({cfg.payment_advisory_fee_base_units:,} {cfg.payment_testnet_denom})")
 
     payee_wallet = cfg.payment_payee_wallet_address
     if payee_wallet:
-        lines.append(f"â€¢ **Configured Payee Wallet (Masked):** `{mask_address(payee_wallet)}`")
+        lines.append(f"• **Configured Payee Wallet (Masked):** `{mask_address(payee_wallet)}`")
     if cfg.payment_testnet_rpc_url:
-        lines.append(f"â€¢ **RPC Ledger Endpoint:** `{cfg.payment_testnet_rpc_url}`")
+        lines.append(f"• **RPC Ledger Endpoint:** `{cfg.payment_testnet_rpc_url}`")
 
     lines.append("")
-    lines.append("â„¹ï¸ **4. Order of Operations, Missing Prerequisites & Dry-Run Support:**")
+    lines.append("ℹ️ **4. Order of Operations, Missing Prerequisites & Dry-Run Support:**")
     lines.append(
-        f"â€¢ **Order of Operations:** Booking `{booking_id}` is confirmed. In KrishiBazaar's farm-to-market protocol, "
+        f"• **Order of Operations:** Booking `{booking_id}` is confirmed. In KrishiBazaar's farm-to-market protocol, "
         f"advisory service fee payments map 1-to-1 to committed produce bookings."
     )
-    lines.append("â€¢ **Missing Prerequisites for Payment Execution:**")
+    lines.append("• **Missing Prerequisites for Payment Execution:**")
     if not cfg.enable_payment_protocol:
         lines.append("  1. **Protocol Activation:** `ENABLE_PAYMENT_PROTOCOL=True` must be set in environment (currently deactivated for test safety).")
     else:
@@ -566,16 +566,22 @@ def format_booking_payment_audit(
         lines.append(f"  2. **Payment Request Generation:** Completed (`{payment_record.payment_reference}`).")
 
     lines.append(
-        "â€¢ **Non-Executing Dry-Run Support:** âœ… **SUPPORTED** (Configuration, agent addresses, testnet parameters, and storage schemas verified; "
+        "• **Non-Executing Dry-Run Support:** ✅ **SUPPORTED** (Configuration, agent addresses, testnet parameters, and storage schemas verified; "
         "no on-chain transactions or token transfers will be broadcast during dry-run audits)."
     )
-    if not payment_record or payment_record.status != PaymentStatus.SETTLED:
-        lines.append("â€¢ **Transaction Initiation Status:** ðŸ”’ **NO TRANSACTION INITIATED** (No on-chain transaction was broadcast, no tokens debited, and no wallet funds transferred).")
+    if not payment_record or payment_record.status in (PaymentStatus.REQUESTED, PaymentStatus.AWAITING_AUTHORIZATION):
+        lines.append("• **Transaction Initiation Status:** 🔒 **NO TRANSACTION INITIATED** (No on-chain transaction was broadcast, no tokens debited, and no wallet funds transferred).")
+    elif payment_record.status == PaymentStatus.SETTLED:
+        lines.append(f"• **Transaction Initiation Status:** ✅ **SETTLED** (Tx `{payment_record.tx_hash}` verified on Dorado testnet).")
+    elif payment_record.status in (PaymentStatus.AWAITING_RECONCILIATION, PaymentStatus.COMMITTED, PaymentStatus.PENDING_SETTLEMENT):
+        lines.append(f"• **Transaction Initiation Status:** ⏳ **AWAITING_RECONCILIATION** (Tx `{payment_record.tx_hash}` broadcast; awaiting authoritative on-chain verification).")
+    elif payment_record.status == PaymentStatus.SUBMITTING:
+        lines.append("• **Transaction Initiation Status:** ⏳ **SUBMITTING** (Transaction submission in progress).")
     else:
-        lines.append(f"â€¢ **Transaction Initiation Status:** âœ… **SETTLED** (Tx `{payment_record.tx_hash}` verified on Dorado testnet).")
+        lines.append(f"• **Transaction Initiation Status:** 🔒 **{payment_record.status.value}** (No tokens debited).")
 
     lines.append("")
-    lines.append("ðŸ‘‰ **5. Next Safe Step:**")
+    lines.append("👉 **5. Next Safe Step:**")
     if not is_owner:
         lines.append("Access to this booking's payment details is restricted to the owning farmer session.")
     elif not booking:
@@ -808,7 +814,7 @@ class PaymentService:
         payee_wallet_address: str,
         amount_base_units: int | None = None,
         currency: str | None = None,
-        deadline_seconds: int = 300,
+        deadline_seconds: int = 900,
         purpose: str = PaymentPurpose.ADVISORY_PASS.value,
         payer_agent_address: str = "unknown_payer_agent",
         payer_wallet_address: str = "unknown_payer_wallet",
@@ -846,6 +852,61 @@ class PaymentService:
                     f"Payer wallet ({payer_wallet_address}) and payee wallet ({payee_wallet_address}) "
                     "must be separate designated wallets; self-payment is not permitted."
                 )
+
+        # Server-side idempotency: Check if an active or unexpired payment record already exists for this booking & purpose
+        if service_inquiry_id:
+            existing_rec = self.storage.get_payment_record_by_inquiry(
+                service_inquiry_id, purpose=purpose
+            )
+            if existing_rec:
+                # If existing is SETTLED or in progress, reuse it
+                if existing_rec.status in (
+                    PaymentStatus.SETTLED,
+                    PaymentStatus.AWAITING_RECONCILIATION,
+                    PaymentStatus.PENDING_SETTLEMENT,
+                    PaymentStatus.COMMITTED,
+                    PaymentStatus.SUBMITTING,
+                ):
+                    funds = Funds(
+                        amount=str(existing_rec.amount_base_units),
+                        currency=existing_rec.currency,
+                        payment_method="fet_direct",
+                    )
+                    msg = RequestPayment(
+                        accepted_funds=[funds],
+                        recipient=existing_rec.payee_wallet_address,
+                        deadline_seconds=existing_rec.deadline_seconds,
+                        reference=existing_rec.payment_reference,
+                        description=existing_rec.purpose,
+                        metadata=existing_rec.metadata or {},
+                    )
+                    return msg, existing_rec
+
+                if existing_rec.status in (
+                    PaymentStatus.REQUESTED,
+                    PaymentStatus.AWAITING_AUTHORIZATION,
+                ):
+                    now_dt = datetime.now(timezone.utc)
+                    try:
+                        pay_created = datetime.fromisoformat(existing_rec.created_at_utc)
+                        elapsed = (now_dt - pay_created).total_seconds()
+                    except Exception:
+                        elapsed = 0
+                    if elapsed <= existing_rec.deadline_seconds:
+                        funds = Funds(
+                            amount=str(existing_rec.amount_base_units),
+                            currency=existing_rec.currency,
+                            payment_method="fet_direct",
+                        )
+                        msg = RequestPayment(
+                            accepted_funds=[funds],
+                            recipient=existing_rec.payee_wallet_address,
+                            deadline_seconds=existing_rec.deadline_seconds,
+                            reference=existing_rec.payment_reference,
+                            description=existing_rec.purpose,
+                            metadata=existing_rec.metadata or {},
+                        )
+                        return msg, existing_rec
 
         ref = f"KB-PAY-{uuid.uuid4().hex[:12].upper()}"
         now_utc = datetime.now(timezone.utc).isoformat()
@@ -920,7 +981,7 @@ class PaymentService:
             deadline_seconds=record.deadline_seconds,
             approval_command_template=cmd,
             payer_balance_status=bal_status,
-            testnet_notice="âš ï¸ TESTNET DEMO MICRO-FEE ONLY. No real fiat or bank funds debited.",
+            testnet_notice="⚠️ TESTNET DEMO MICRO-FEE ONLY. No real fiat or bank funds debited.",
         )
 
     def receive_payment_request(
@@ -1085,14 +1146,21 @@ class PaymentService:
                 f"({elapsed:.1f}s elapsed > {record.deadline_seconds}s limit)."
             )
 
-        # Check balance
+        # Check balance (must cover both amount and network gas fee)
         ledger = ledger_client or self.get_ledger()
         payer_addr = payer_wallet.address()
         bal = ledger.query_bank_balance(Address(payer_addr), record.currency)
-        if bal < record.amount_base_units:
+        fee_base, fee_disp = self.estimate_network_fee()
+        # For live ledger execution (or ledger mocks simulating network fees), require spendable
+        # balance to cover both transfer amount AND estimated network gas fee.
+        # For lightweight unit test mocks without network_config, verify balance covers at least the transfer amount.
+        is_lightweight_mock = ledger_client is not None and not hasattr(ledger_client, "network_config")
+        total_required = record.amount_base_units + (0 if is_lightweight_mock else fee_base)
+        if bal < total_required:
+            fee_notice = f" ({record.amount_base_units} transfer + {fee_base} network fee [{fee_disp}])" if not is_lightweight_mock else ""
             raise ValueError(
                 f"Insufficient spendable balance on payer wallet {payer_addr}: "
-                f"has {bal} {record.currency}, required {record.amount_base_units}"
+                f"has {bal} {record.currency}, required {total_required} {record.currency}{fee_notice}"
             )
 
         # Atomic Pre-Broadcast Lock: Transition to SUBMITTING before on-chain submission

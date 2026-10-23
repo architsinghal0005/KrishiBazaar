@@ -1,4 +1,4 @@
-﻿"""
+"""
 Booking and Approval Service for KrishiBazaar.
 Manages option selection, pending proposal creation with expiry, explicit farmer approval validation,
 simulated booking record generation, and status lookups.
@@ -714,34 +714,35 @@ def format_proposal_summary(proposal: BookingProposal) -> list[str]:
     Itemizes all charges, distinguishes assumptions, and asks for unambiguous approval.
     """
     lines: list[str] = []
-    lines.append("ðŸ“‹ **KrishiBazaar: Booking Proposal & Confirmation Request** ðŸ“‹")
+    lines.append("📋 **KrishiBazaar: Booking Proposal & Confirmation Request (SIMULATED — NOT A REAL BOOKING)** 📋")
     lines.append(f"*Proposal ID:* `{proposal.proposal_id}` *(Valid for 15 minutes)*")
+    lines.append("⚠️ **SIMULATED — NOT A REAL BOOKING:** Advisory negotiation estimate only. No real commercial buyer contract, physical crop sale, carrier dispatch, or payment transfer has occurred.")
     lines.append("")
 
     is_mandi = proposal.channel_type == "MANDI"
     channel_desc = (
-        "APMC Wholesale Mandi (Official Benchmark Modal Price â€” no buyer contract exists)"
+        "APMC Wholesale Mandi (Official Benchmark Modal Price — no buyer contract exists)"
         if is_mandi
         else "Direct Commercial Buyer (Simulated Bid)"
     )
 
-    lines.append(f"â€¢ **Destination Channel:** **{proposal.destination_name}** [{channel_desc}]")
-    lines.append(f"â€¢ **Produce Details:** {proposal.quantity_quintals:g} quintals of {proposal.crop}")
-    lines.append(f"â€¢ **Route:** Pickup at {proposal.origin_location} âž” Delivery at {proposal.destination_name}")
-    lines.append(f"â€¢ **Scheduled Transit Date:** {proposal.transit_date}")
+    lines.append(f"• **Destination Channel:** **{proposal.destination_name}** [{channel_desc}]")
+    lines.append(f"• **Produce Details:** {proposal.quantity_quintals:g} quintals of {proposal.crop}")
+    lines.append(f"• **Route:** Pickup at {proposal.origin_location} ➔ Delivery at {proposal.destination_name}")
+    lines.append(f"• **Scheduled Transit Date:** {proposal.transit_date}")
     lines.append("")
 
     # Financial Breakdown with Provenance
     top = proposal.selected_option
-    lines.append("ðŸ’° **Financial Breakdown & Cost Deductions:**")
+    lines.append("💰 **Financial Breakdown & Cost Deductions:**")
     lines.append(
-        f"â€¢ **Estimated Gross Value:** INR {proposal.estimated_gross_value:,.2f} "
+        f"• **Estimated Gross Value:** INR {proposal.estimated_gross_value:,.2f} "
         f"({top.quantity_quintals:g} qtl @ INR {top.offered_price_per_quintal:,.2f}/qtl) [{top.price_provenance}]"
     )
     total_deductions = round(
         top.transport_cost + top.applicable_market_charges + top.storage_cost + top.estimated_loss_cost, 2
     )
-    lines.append(f"â€¢ **Itemized Deductions (Total Estimated Deductions: INR {total_deductions:,.2f}):**")
+    lines.append(f"• **Itemized Deductions (Total Estimated Deductions: INR {total_deductions:,.2f}):**")
     lines.append(f"  - Transport Freight: INR {top.transport_cost:,.2f} [{top.transport_provenance}]")
     if getattr(top, "is_apmc_exempt", False) or (top.channel_type == "DIRECT_BUYER" and top.mandi_cess_apmc == 0.0):
         lines.append(
@@ -760,24 +761,24 @@ def format_proposal_summary(proposal: BookingProposal) -> list[str]:
     lines.append("")
 
     lines.append(
-        f"â€¢ **Estimated Net In-Pocket Return:** **INR {proposal.estimated_net_payout:,.2f}** "
+        f"• **Estimated Net In-Pocket Return:** **INR {proposal.estimated_net_payout:,.2f}** "
         f"(INR {top.net_return_per_quintal:,.2f}/qtl) *(Estimated return derived from stated assumptions; NOT a guaranteed payout or confirmed sale price)*"
     )
     lines.append(
-        f"â€¢ **Deductions Reconciliation:** Gross Value (INR {proposal.estimated_gross_value:,.2f}) "
+        f"• **Deductions Reconciliation:** Gross Value (INR {proposal.estimated_gross_value:,.2f}) "
         f"- Total Deductions (INR {total_deductions:,.2f}) = Net Return (INR {proposal.estimated_net_payout:,.2f})"
     )
     lines.append(
-        f"â€¢ **Input Provenance & Deductions Breakdown:** {top.charges_provenance}. "
+        f"• **Input Provenance & Deductions Breakdown:** {top.charges_provenance}. "
         f"{'Note: This option is based on an official mandi modal-price benchmark from AGMARKNET. No confirmed buyer offer exists; APMC prices depend on daily physical auction bidding.' if is_mandi else 'Note: Direct buyer bid is a simulated benchmark offer.'}"
     )
     lines.append("")
 
     # Explicit Approval Gate
-    lines.append("ðŸ”’ **Explicit Approval Required:**")
+    lines.append("🔒 **Explicit Approval Required:**")
     lines.append(
         f"To confirm this simulated booking, reply with:\n"
-        f"ðŸ‘‰ *\"Confirm booking\"* or *\"Approve proposal {proposal.proposal_id}\"*"
+        f"👉 *\"Confirm booking\"* or *\"Approve proposal {proposal.proposal_id}\"*"
     )
     lines.append("To cancel or change details, reply with *\"Cancel\"*.")
     lines.append("*(Safety Notice: This will create a simulated test booking in our local ledger. No real payment or carrier dispatch will occur.)*")
@@ -859,34 +860,34 @@ def format_booking_confirmation(
 
     total_deductions = round(booking.transport_cost + booking.other_deductions, 2)
     lines: list[str] = []
-    lines.append("ðŸŽ‰ **Simulated Booking Confirmed!** ðŸŽ‰")
+    lines.append("🎉 **Simulated Booking Confirmed! — SIMULATED — NOT A REAL BOOKING** 🎉")
+    lines.append("⚠️ **SIMULATED — NOT A REAL BOOKING:** This record is a simulated MVP negotiation demonstration stored in your local ledger. No real commercial buyer contract, physical crop sale, carrier dispatch, or payment transfer has occurred.")
     lines.append("")
-    lines.append(f"â€¢ **Booking Reference ID:** `{booking.booking_id}`")
-    lines.append(f"â€¢ **Verification Token:** `{booking.tracking_token}`")
-    lines.append(f"â€¢ **Status:** **{booking.status}** (Simulated MVP Test Record)")
-    lines.append(f"â€¢ **Channel / Destination:** **{booking.channel_name}**")
-    lines.append(f"â€¢ **Produce Booked:** {booking.quantity_quintals:g} quintals of {booking.crop}")
-    lines.append(f"â€¢ **Scheduled Pickup Date:** {booking.pickup_date}")
+    lines.append(f"• **Booking Reference ID:** `{booking.booking_id}`")
+    lines.append(f"• **Verification Token:** `{booking.tracking_token}`")
+    lines.append(f"• **Status:** **{booking.status} (SIMULATED — NOT A REAL BOOKING)**")
+    lines.append(f"• **Channel / Destination:** **{booking.channel_name}**")
+    lines.append(f"• **Produce Booked:** {booking.quantity_quintals:g} quintals of {booking.crop}")
+    lines.append(f"• **Scheduled Pickup Date:** {booking.pickup_date}")
     lines.append(
-        f"â€¢ **Estimated Net Payout:** **INR {booking.net_payout:,.2f}** "
+        f"• **Estimated Net Payout:** **INR {booking.net_payout:,.2f}** "
         f"*(Advisory estimate only; NOT a guaranteed payout or confirmed sale price)*"
     )
     lines.append(
-        f"â€¢ **Financial Summary & Deductions Reconciliation:**\n"
+        f"• **Financial Summary & Deductions Reconciliation:**\n"
         f"  - Gross Produce Value: INR {booking.gross_revenue:,.2f}\n"
         f"  - Total Deductions: INR {total_deductions:,.2f} "
         f"(Freight Transport: INR {booking.transport_cost:,.2f} + Statutory/Labor/Risk: INR {booking.other_deductions:,.2f})\n"
-        f"  - Net Return (Gross - Total Deductions): INR {booking.net_payout:,.2f} "
-        f"*(Reconciled estimate: INR {booking.gross_revenue:,.2f} - INR {total_deductions:,.2f} = INR {booking.net_payout:,.2f})*"
+        f"  - Net Return (Gross - Total Deductions): INR {booking.net_payout:,.2f}"
     )
     lines.append("")
     lines.append(
-        "â„¹ï¸ **Simulation Notice:** All bookings in KrishiBazaar Phase 6 are simulated MVP demonstrations "
+        "ℹ️ **Simulation Notice:** All bookings in KrishiBazaar Phase 6 are simulated MVP demonstrations "
         "stored in your local SQLite ledger. No real commercial buyer contract, carrier dispatch, payment transfer, "
         "or physical transaction has occurred."
     )
     lines.append(
-        f"ðŸ‘‰ **Status Lookup:** To verify status anytime, reply with:\n"
+        f"👉 **Status Lookup:** To verify status anytime, reply with:\n"
         f"*\"Status of {booking.booking_id}\"* or *\"Track {booking.booking_id}\"*"
     )
 
@@ -895,9 +896,9 @@ def format_booking_confirmation(
 
     if not is_pay_enabled:
         lines.append("")
-        lines.append("ðŸ’³ **Payment Status:**")
-        lines.append("â€¢ **Payment Status:** Payment is currently disabled. No transfer has been initiated.")
-        lines.append(f"â€¢ **Booking Reference:** `{booking.booking_id}`")
+        lines.append("💳 **Payment Status:**")
+        lines.append("• **Payment Status:** Payment is currently disabled. No transfer has been initiated.")
+        lines.append(f"• **Booking Reference:** `{booking.booking_id}`")
         lines.append("*(Fetch.ai Agent Payment Protocol settlement remains deactivated by default for safety)*")
     else:
         from krishibazaar.services.payment_service import (
@@ -925,17 +926,17 @@ def format_booking_confirmation(
         amount_display = format_token_amount_display(fee_base, denom)
 
         lines.append("")
-        lines.append("ðŸ’³ **Payment Option (Optional Testnet Advisory Payment):**")
-        lines.append(f"â€¢ **Booking Reference:** `{booking.booking_id}`")
-        lines.append("â€¢ **Payment Status:** READY FOR OPTIONAL TEST PAYMENT")
-        lines.append("â€¢ **Service Purpose:** KrishiBazaar Platform Advisory Service Fee (Optional Testnet Verification)")
-        lines.append(f"â€¢ **Amount & Currency:** **{amount_display}**")
-        lines.append(f"â€¢ **Recipient Address:** `{masked_payee}`")
-        lines.append(f"â€¢ **Network / Environment:** {net}")
-        lines.append(f"â€¢ **Applicable Estimated Network Fee:** {fee}")
+        lines.append("💳 **Payment Option (Optional Testnet Advisory Payment):**")
+        lines.append(f"• **Booking Reference:** `{booking.booking_id}`")
+        lines.append("• **Payment Status:** READY FOR OPTIONAL TEST PAYMENT")
+        lines.append("• **Service Purpose:** KrishiBazaar Platform Advisory Service Fee (Optional Testnet Verification)")
+        lines.append(f"• **Amount & Currency:** **{amount_display}**")
+        lines.append(f"• **Recipient Address:** `{masked_payee}`")
+        lines.append(f"• **Network / Environment:** {net}")
+        lines.append(f"• **Applicable Estimated Network Fee:** {fee}")
         lines.append("")
         lines.append(
-            "ðŸ‘‰ **Pay / Test Payment Action:** Reply *\"Pay advisory fee\"* or click **\"Proceed to Payment Review\"** to review payment terms before authorizing."
+            "👉 **Pay / Test Payment Action:** Reply *\"Pay advisory fee\"* or click **\"Proceed to Payment Review\"** to review payment terms before authorizing."
         )
         lines.append(
             f"*(Note: Estimated produce sale proceeds of INR {booking.net_payout:,.2f} represent simulated mandi crop sales, "
@@ -951,23 +952,23 @@ def format_booking_status(booking: BookingRecord) -> list[str]:
     """
     total_deductions = round(booking.transport_cost + booking.other_deductions, 2)
     lines: list[str] = []
-    lines.append("ðŸ“¦ **KrishiBazaar: Simulated Booking Status** ðŸ“¦")
+    lines.append("📦 **KrishiBazaar: Simulated Booking Status** 📦")
     lines.append("")
-    lines.append(f"â€¢ **Booking Reference ID:** `{booking.booking_id}`")
-    lines.append(f"â€¢ **Verification Token:** `{booking.tracking_token}`")
-    lines.append(f"â€¢ **Current Status:** **{booking.status}** (Simulated MVP Record)")
-    lines.append(f"â€¢ **Destination Channel:** {booking.channel_name}")
-    lines.append(f"â€¢ **Produce:** {booking.quantity_quintals:g} quintals of {booking.crop}")
-    lines.append(f"â€¢ **Scheduled Date:** {booking.pickup_date}")
+    lines.append(f"• **Booking Reference ID:** `{booking.booking_id}`")
+    lines.append(f"• **Verification Token:** `{booking.tracking_token}`")
+    lines.append(f"• **Current Status:** **{booking.status}** (Simulated MVP Record)")
+    lines.append(f"• **Destination Channel:** {booking.channel_name}")
+    lines.append(f"• **Produce:** {booking.quantity_quintals:g} quintals of {booking.crop}")
+    lines.append(f"• **Scheduled Date:** {booking.pickup_date}")
     lines.append(
-        f"â€¢ **Financial Summary:** Gross Value: INR {booking.gross_revenue:,.2f} | "
+        f"• **Financial Summary:** Gross Value: INR {booking.gross_revenue:,.2f} | "
         f"Total Deductions: INR {total_deductions:,.2f} (Transport: INR {booking.transport_cost:,.2f} + Other: INR {booking.other_deductions:,.2f}) | "
         f"Net Payout: INR {booking.net_payout:,.2f} *(Advisory estimate only; NOT a guaranteed payout or confirmed sale price)*"
     )
-    lines.append(f"â€¢ **Ledger Timestamp:** {booking.timestamp_utc}")
+    lines.append(f"• **Ledger Timestamp:** {booking.timestamp_utc}")
     lines.append("")
     lines.append(
-        "â„¹ï¸ **Audit Notice:** This record exists in the local SQLite ledger for MVP audit trail testing. "
+        "ℹ️ **Audit Notice:** This record exists in the local SQLite ledger for MVP audit trail testing. "
         "No real carrier, buyer, or financial transaction has occurred."
     )
 

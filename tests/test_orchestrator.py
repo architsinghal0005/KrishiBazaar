@@ -1,4 +1,4 @@
-﻿"""
+"""
 Unit tests for KrishiBazaar Orchestrator Agent (tests/test_orchestrator.py).
 Verifies:
 - Agent Chat Protocol compliance (acknowledgements, messaging, EndSessionContent)
@@ -66,7 +66,7 @@ def test_build_greeting_response():
     """Verify greeting text contains brand and how to start instruction."""
     greeting = build_greeting_response("Hello KrishiBazaar")
     assert "KrishiBazaar" in greeting
-    assert "à¤•à¥ƒà¤·à¤¿à¤¬à¤¾à¤œà¤¼à¤¾à¤°" in greeting
+    assert "कृषिबाज़ार" in greeting
     assert "50 quintals of onions" in greeting
 
 
@@ -776,7 +776,7 @@ async def test_orchestrator_forecast_date_alignment_and_net_return_provenance_la
         assert "2026-10-19" in text_content
 
         # 2. Top option APMC Mandi provenance & distinction
-        assert "APMC Wholesale Mandi (Official Benchmark Modal Price â€” no buyer contract exists)" in text_content
+        assert "APMC Wholesale Mandi (Official Benchmark Modal Price — no buyer contract exists)" in text_content
         assert "Estimated return only; NOT a guaranteed payout" in text_content
         assert "guaranteed net return" not in text_content.lower()
         assert "not a guaranteed payout" in text_content.lower()

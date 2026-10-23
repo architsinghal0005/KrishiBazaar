@@ -1,4 +1,4 @@
-﻿"""
+"""
 SQLite Persistence Layer for KrishiBazaar.
 Ensures session data and booking records persist across agent invocations.
 """
@@ -651,14 +651,50 @@ class StorageEngine:
             rows = cursor.fetchall()
             return [self._row_to_payment_record(row) for row in rows]
 
-    def get_payment_record_by_inquiry(self, inquiry_id: str) -> PaymentRecord | None:
-        """Retrieve the payment record associated with a specific booking or inquiry reference (case-insensitive)."""
+    def get_payment_record_by_inquiry(
+        self, inquiry_id: str, purpose: str | None = None
+    ) -> PaymentRecord | None:
+        """
+        Retrieve the payment record associated with a specific booking or inquiry reference (case-insensitive),
+        optionally filtered by service purpose.
+        Prioritizes SETTLED and active/in-progress records over failed or cancelled ones.
+        """
         with self._get_connection() as conn:
             cursor = conn.cursor()
-            cursor.execute(
-                "SELECT * FROM payment_records WHERE UPPER(service_inquiry_id) = UPPER(?) ORDER BY created_at_utc DESC LIMIT 1",
-                (inquiry_id,),
-            )
+            if purpose:
+                cursor.execute(
+                    """
+                    SELECT * FROM payment_records 
+                    WHERE UPPER(service_inquiry_id) = UPPER(?) AND purpose = ?
+                    ORDER BY 
+                        CASE 
+                            WHEN status = 'SETTLED' THEN 1
+                            WHEN status IN ('AWAITING_RECONCILIATION', 'PENDING_SETTLEMENT', 'COMMITTED', 'SUBMITTING') THEN 2
+                            WHEN status IN ('AWAITING_AUTHORIZATION', 'REQUESTED') THEN 3
+                            ELSE 4
+                        END,
+                        created_at_utc DESC 
+                    LIMIT 1
+                    """,
+                    (inquiry_id, purpose),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT * FROM payment_records 
+                    WHERE UPPER(service_inquiry_id) = UPPER(?)
+                    ORDER BY 
+                        CASE 
+                            WHEN status = 'SETTLED' THEN 1
+                            WHEN status IN ('AWAITING_RECONCILIATION', 'PENDING_SETTLEMENT', 'COMMITTED', 'SUBMITTING') THEN 2
+                            WHEN status IN ('AWAITING_AUTHORIZATION', 'REQUESTED') THEN 3
+                            ELSE 4
+                        END,
+                        created_at_utc DESC 
+                    LIMIT 1
+                    """,
+                    (inquiry_id,),
+                )
             row = cursor.fetchone()
             if not row:
                 return None
