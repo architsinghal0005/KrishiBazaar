@@ -1,4 +1,4 @@
-"""
+﻿"""
 Weather Service for KrishiBazaar.
 Integrates with Open-Meteo's documented forecast API (https://api.open-meteo.com/v1/forecast).
 Validates coordinates, request parameters, HTTP status, timeouts, and missing fields.
@@ -7,7 +7,8 @@ Calculates agricultural transit hazard ratings and data provenance.
 
 from __future__ import annotations
 import logging
-from datetime import datetime, timezone
+import re
+from datetime import date, datetime, timezone, timedelta
 from typing import Any
 import httpx
 
@@ -60,6 +61,107 @@ def resolve_coordinates(
     return (19.9975, 73.7898)
 
 
+def resolve_target_date(
+    deadline_str: str | None,
+    base_date: datetime | None = None,
+) -> str | None:
+    """
+    Parse a selling deadline (e.g. 'tomorrow', '2026-10-19', 'in 2 days', 'today') into ISO 'YYYY-MM-DD'.
+    Uses Asia/Kolkata (UTC+5:30) as standard reference for Indian agricultural markets.
+    """
+    if not deadline_str or not isinstance(deadline_str, str):
+        return None
+
+    cleaned = deadline_str.strip().lower()
+    if cleaned in ("none", "null", ""):
+        return None
+
+    ist = timezone(timedelta(hours=5, minutes=30))
+    if base_date:
+        if isinstance(base_date, datetime):
+            now_ist = base_date.astimezone(ist) if base_date.tzinfo else base_date.replace(tzinfo=ist)
+        elif isinstance(base_date, date):
+            now_ist = datetime(base_date.year, base_date.month, base_date.day, tzinfo=ist)
+        else:
+            now_ist = datetime.now(ist)
+    else:
+        now_ist = datetime.now(ist)
+
+    # Relative terms
+    if cleaned in ("today", "same day", "immediate", "now"):
+        return now_ist.strftime("%Y-%m-%d")
+
+    if cleaned in ("tomorrow", "next day", "1 day", "1 days", "in 1 day", "by tomorrow"):
+        return (now_ist + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    if cleaned in ("day after tomorrow", "2 days", "in 2 days", "within 2 days"):
+        return (now_ist + timedelta(days=2)).strftime("%Y-%m-%d")
+
+    if cleaned in ("3 days", "in 3 days", "within 3 days"):
+        return (now_ist + timedelta(days=3)).strftime("%Y-%m-%d")
+
+    # ISO YYYY-MM-DD
+    iso_match = re.search(r"\b(\d{4})[-/](\d{1,2})[-/](\d{1,2})\b", cleaned)
+    if iso_match:
+        y, m, d = int(iso_match.group(1)), int(iso_match.group(2)), int(iso_match.group(3))
+        try:
+            return datetime(y, m, d).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    # Indian format DD/MM/YYYY or DD-MM-YYYY
+    dmy_match = re.search(r"\b(\d{1,2})[-/](\d{1,2})[-/](\d{4})\b", cleaned)
+    if dmy_match:
+        d, m, y = int(dmy_match.group(1)), int(dmy_match.group(2)), int(dmy_match.group(3))
+        try:
+            return datetime(y, m, d).strftime("%Y-%m-%d")
+        except ValueError:
+            pass
+
+    return None
+
+
+def resolve_planned_transit_date(
+    deadline_str: str | None,
+    base_date: datetime | None = None,
+) -> tuple[str, bool, str | None]:
+    """
+    Resolve a planned pickup/transit date ensuring it is strictly a valid future date (>= tomorrow in IST).
+    Indian agricultural markets operate on Asia/Kolkata (UTC+5:30) time.
+
+    Returns:
+        tuple of (planned_transit_date_iso, was_adjusted_from_past, original_parsed_date)
+    """
+    ist = timezone(timedelta(hours=5, minutes=30))
+    if base_date:
+        now_ist = base_date.astimezone(ist) if base_date.tzinfo else base_date.replace(tzinfo=ist)
+    else:
+        now_ist = datetime.now(ist)
+
+    today_str = now_ist.strftime("%Y-%m-%d")
+    tomorrow_str = (now_ist + timedelta(days=1)).strftime("%Y-%m-%d")
+
+    parsed_date = resolve_target_date(deadline_str, base_date=base_date)
+
+    if not parsed_date:
+        # Default to tomorrow (valid future pickup date)
+        return tomorrow_str, False, None
+
+    if parsed_date < today_str:
+        # Requested date is in the past! Clamp to tomorrow and flag adjustment
+        logger.warning(
+            f"Requested selling/pickup date '{parsed_date}' is in the past (< {today_str}). "
+            f"Automatically adjusting planned pickup date to next valid transit date: {tomorrow_str}."
+        )
+        return tomorrow_str, True, parsed_date
+    elif parsed_date == today_str:
+        # Same-day pickup requested: advance to tomorrow for valid scheduled dispatch
+        return tomorrow_str, True, parsed_date
+    else:
+        # Valid future date
+        return parsed_date, False, None
+
+
 def _compute_transit_hazard(
     precip_mm: float, precip_prob_pct: float, temp_max_c: float
 ) -> tuple[str, str]:
@@ -89,15 +191,20 @@ def _compute_transit_hazard(
 evaluate_transit_hazard = _compute_transit_hazard
 
 
-
-def _get_weather_fallback(location: str, lat: float, lon: float) -> WeatherResult:
+def _get_weather_fallback(
+    location: str,
+    lat: float,
+    lon: float,
+    target_date: str | None = None,
+) -> WeatherResult:
     """Return offline sample weather report clearly labeled as simulated benchmark."""
     now_utc = datetime.now(timezone.utc)
     today_str = now_utc.strftime("%Y-%m-%d")
+    forecast_date = target_date or today_str
 
     report = WeatherRiskReport(
         location=location.title(),
-        forecast_date=today_str,
+        forecast_date=forecast_date,
         temperature_max_c=31.0,
         temperature_min_c=19.5,
         precipitation_sum_mm=0.0,
@@ -106,6 +213,8 @@ def _get_weather_fallback(location: str, lat: float, lon: float) -> WeatherResul
         spoilage_hazard_level="LOW",
         transit_advice="Offline sample weather. Standard dry transit conditions assumed.",
         data_source="Open-Meteo Offline Sample Cache",
+        target_date_requested=target_date,
+        is_target_date_matched=True,
     )
 
     return WeatherResult(
@@ -117,7 +226,7 @@ def _get_weather_fallback(location: str, lat: float, lon: float) -> WeatherResul
         provenance=DataProvenance(
             source="Open-Meteo Offline Sample Cache",
             retrieval_timestamp_utc=now_utc.isoformat(),
-            observation_date=today_str,
+            observation_date=forecast_date,
             freshness_status="SIMULATED_SAMPLE",
             is_live=False,
             disclaimer="Sample weather report for simulation. Not live meteorological forecast.",
@@ -129,11 +238,13 @@ async def get_transit_weather_async(
     location: str,
     latitude: float | None = None,
     longitude: float | None = None,
+    target_date: str | None = None,
     client: httpx.AsyncClient | None = None,
 ) -> WeatherResult:
     """
     Fetch live weather forecast from Open-Meteo REST API.
     Validates coordinates, HTTP status, timeouts, and missing fields.
+    Matches the requested transit or selling deadline date if available in forecast window.
     """
     coords = resolve_coordinates(location, latitude, longitude)
     now_utc = datetime.now(timezone.utc).isoformat()
@@ -166,7 +277,7 @@ async def get_transit_weather_async(
             "windspeed_10m_max",
         ],
         "timezone": "Asia/Kolkata",
-        "forecast_days": 3,
+        "forecast_days": 7,
     }
 
     try:
@@ -190,16 +301,33 @@ async def get_transit_weather_async(
 
             if not (dates and temp_maxes and temp_mins):
                 logger.warning("Open-Meteo response missing critical daily fields. Using fallback.")
-                return _get_weather_fallback(location, lat, lon)
+                return _get_weather_fallback(location, lat, lon, target_date=target_date)
 
-            forecast_date = dates[0]
-            temp_max = float(temp_maxes[0]) if temp_maxes[0] is not None else 30.0
-            temp_min = float(temp_mins[0]) if temp_mins[0] is not None else 20.0
-            precip_sum = float(precip_sums[0]) if (precip_sums and precip_sums[0] is not None) else 0.0
-            precip_prob = float(precip_probs[0]) if (precip_probs and precip_probs[0] is not None) else 0.0
-            wind_speed = float(winds[0]) if (winds and winds[0] is not None) else 10.0
+            matched_idx = 0
+            is_date_matched = True
+            if target_date:
+                if target_date in dates:
+                    matched_idx = dates.index(target_date)
+                else:
+                    is_date_matched = False
+                    logger.info(
+                        f"Requested transit date '{target_date}' not found in forecast window "
+                        f"({dates[0]} to {dates[-1]}). Using first available date {dates[0]}."
+                    )
+
+            forecast_date = dates[matched_idx]
+            temp_max = float(temp_maxes[matched_idx]) if temp_maxes[matched_idx] is not None else 30.0
+            temp_min = float(temp_mins[matched_idx]) if temp_mins[matched_idx] is not None else 20.0
+            precip_sum = float(precip_sums[matched_idx]) if (precip_sums and precip_sums[matched_idx] is not None) else 0.0
+            precip_prob = float(precip_probs[matched_idx]) if (precip_probs and precip_probs[matched_idx] is not None) else 0.0
+            wind_speed = float(winds[matched_idx]) if (winds and winds[matched_idx] is not None) else 10.0
 
             hazard_level, advice = _compute_transit_hazard(precip_sum, precip_prob, temp_max)
+            if not is_date_matched and target_date:
+                advice = (
+                    f"Notice: Requested transit date '{target_date}' was outside forecast window. "
+                    f"Showing forecast for {forecast_date}. {advice}"
+                )
 
             report = WeatherRiskReport(
                 location=location.title(),
@@ -212,6 +340,8 @@ async def get_transit_weather_async(
                 spoilage_hazard_level=hazard_level,  # type: ignore[arg-type]
                 transit_advice=advice,
                 data_source="Open-Meteo API",
+                target_date_requested=target_date,
+                is_target_date_matched=is_date_matched,
             )
 
             return WeatherResult(
@@ -231,20 +361,21 @@ async def get_transit_weather_async(
             )
         else:
             logger.error(f"Open-Meteo HTTP {resp.status_code}: {resp.text[:120]}")
-            return _get_weather_fallback(location, lat, lon)
+            return _get_weather_fallback(location, lat, lon, target_date=target_date)
 
     except httpx.TimeoutException:
         logger.warning(f"Open-Meteo API timed out for '{location}'. Using fallback.")
-        return _get_weather_fallback(location, lat, lon)
+        return _get_weather_fallback(location, lat, lon, target_date=target_date)
     except Exception as ex:
         logger.error(f"Open-Meteo exception: {type(ex).__name__} - {str(ex)}")
-        return _get_weather_fallback(location, lat, lon)
+        return _get_weather_fallback(location, lat, lon, target_date=target_date)
 
 
 def get_transit_weather(
     location: str,
     latitude: float | None = None,
     longitude: float | None = None,
+    target_date: str | None = None,
 ) -> WeatherResult:
     """Synchronous wrapper for Open-Meteo weather retrieval."""
     coords = resolve_coordinates(location, latitude, longitude)
@@ -278,7 +409,7 @@ def get_transit_weather(
             "windspeed_10m_max",
         ],
         "timezone": "Asia/Kolkata",
-        "forecast_days": 3,
+        "forecast_days": 7,
     }
 
     try:
@@ -296,16 +427,29 @@ def get_transit_weather(
             winds = daily.get("windspeed_10m_max", [])
 
             if not (dates and temp_maxes and temp_mins):
-                return _get_weather_fallback(location, lat, lon)
+                return _get_weather_fallback(location, lat, lon, target_date=target_date)
 
-            forecast_date = dates[0]
-            temp_max = float(temp_maxes[0]) if temp_maxes[0] is not None else 30.0
-            temp_min = float(temp_mins[0]) if temp_mins[0] is not None else 20.0
-            precip_sum = float(precip_sums[0]) if (precip_sums and precip_sums[0] is not None) else 0.0
-            precip_prob = float(precip_probs[0]) if (precip_probs and precip_probs[0] is not None) else 0.0
-            wind_speed = float(winds[0]) if (winds and winds[0] is not None) else 10.0
+            matched_idx = 0
+            is_date_matched = True
+            if target_date:
+                if target_date in dates:
+                    matched_idx = dates.index(target_date)
+                else:
+                    is_date_matched = False
+
+            forecast_date = dates[matched_idx]
+            temp_max = float(temp_maxes[matched_idx]) if temp_maxes[matched_idx] is not None else 30.0
+            temp_min = float(temp_mins[matched_idx]) if temp_mins[matched_idx] is not None else 20.0
+            precip_sum = float(precip_sums[matched_idx]) if (precip_sums and precip_sums[matched_idx] is not None) else 0.0
+            precip_prob = float(precip_probs[matched_idx]) if (precip_probs and precip_probs[matched_idx] is not None) else 0.0
+            wind_speed = float(winds[matched_idx]) if (winds and winds[matched_idx] is not None) else 10.0
 
             hazard_level, advice = _compute_transit_hazard(precip_sum, precip_prob, temp_max)
+            if not is_date_matched and target_date:
+                advice = (
+                    f"Notice: Requested transit date '{target_date}' was outside forecast window. "
+                    f"Showing forecast for {forecast_date}. {advice}"
+                )
 
             report = WeatherRiskReport(
                 location=location.title(),
@@ -318,6 +462,8 @@ def get_transit_weather(
                 spoilage_hazard_level=hazard_level,  # type: ignore[arg-type]
                 transit_advice=advice,
                 data_source="Open-Meteo API",
+                target_date_requested=target_date,
+                is_target_date_matched=is_date_matched,
             )
 
             return WeatherResult(
@@ -336,6 +482,6 @@ def get_transit_weather(
                 ),
             )
         else:
-            return _get_weather_fallback(location, lat, lon)
+            return _get_weather_fallback(location, lat, lon, target_date=target_date)
     except Exception:
-        return _get_weather_fallback(location, lat, lon)
+        return _get_weather_fallback(location, lat, lon, target_date=target_date)

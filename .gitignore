@@ -41,6 +41,7 @@ venv.bak/
 secrets/
 *.pem
 *.key
+private_keys.json
 
 # SQLite Databases & Local Persistent Storage
 *.db
@@ -68,3 +69,6 @@ ehthumbs.db
 Desktop.ini
 $RECYCLE.BIN/
 .DS_Store
+
+.venv/
+.venv313/

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Unit tests for KrishiBazaar SQLite storage engine (tests/test_storage.py).
 """
 
@@ -137,3 +137,106 @@ def test_booking_create_and_retrieve(temp_storage: StorageEngine):
 
     unknown_bookings = temp_storage.list_bookings(farmer_id="other_farmer")
     assert len(unknown_bookings) == 0
+
+
+def test_proposal_lifecycle_and_atomic_consumption(temp_storage: StorageEngine):
+    """Test saving, retrieving, superseding, and atomic consumption of proposals."""
+    from datetime import datetime, timezone, timedelta
+    from krishibazaar.models import BookingProposal, NetReturnBreakdown
+
+    now = datetime.now(timezone.utc)
+    expires = now + timedelta(minutes=15)
+
+    option = NetReturnBreakdown(
+        scenario_id="SC-1",
+        channel_type="MANDI",
+        destination_name="Lasalgaon Mandi",
+        distance_km=25.0,
+        gross_revenue=80000.0,
+        offered_price_per_quintal=2000.0,
+        transport_cost=2000.0,
+        mandi_cess_apmc=1200.0,
+        loading_unloading_cost=800.0,
+        spoilage_risk_penalty=0.0,
+        total_deductions=4000.0,
+        net_return=76000.0,
+        net_return_per_quintal=1900.0,
+        rank=1,
+    )
+
+    prop1 = BookingProposal(
+        proposal_id="PROP-20261018-TEST01",
+        session_id="session_prop_1",
+        farmer_id="farmer_prop_1",
+        selected_option=option,
+        crop="Onion",
+        quantity_quintals=40.0,
+        origin_location="Nashik",
+        destination_name="Lasalgaon Mandi",
+        channel_type="MANDI",
+        transit_date="2026-10-19",
+        estimated_gross_value=80000.0,
+        itemized_deductions=4000.0,
+        estimated_net_payout=76000.0,
+        created_at_utc=now.isoformat(),
+        expires_at_utc=expires.isoformat(),
+        is_consumed=False,
+    )
+
+    # 1. Save and retrieve
+    temp_storage.save_proposal(prop1)
+    retrieved = temp_storage.get_proposal("PROP-20261018-TEST01")
+    assert retrieved is not None
+    assert retrieved.proposal_id == "PROP-20261018-TEST01"
+    assert retrieved.estimated_net_payout == 76000.0
+    assert retrieved.is_consumed is False
+
+    # Pending for session
+    pending = temp_storage.get_pending_proposal_for_session("session_prop_1")
+    assert pending is not None
+    assert pending.proposal_id == "PROP-20261018-TEST01"
+
+    # 2. Superseding: Saving a new proposal marks prior unconsumed proposal consumed
+    prop2 = BookingProposal(
+        proposal_id="PROP-20261018-TEST02",
+        session_id="session_prop_1",
+        farmer_id="farmer_prop_1",
+        selected_option=option,
+        crop="Onion",
+        quantity_quintals=40.0,
+        origin_location="Nashik",
+        destination_name="Lasalgaon Mandi",
+        channel_type="MANDI",
+        transit_date="2026-10-19",
+        estimated_gross_value=80000.0,
+        itemized_deductions=4000.0,
+        estimated_net_payout=76000.0,
+        created_at_utc=now.isoformat(),
+        expires_at_utc=expires.isoformat(),
+        is_consumed=False,
+    )
+    temp_storage.save_proposal(prop2)
+
+    # Prior proposal is now consumed/superseded
+    old_p = temp_storage.get_proposal("PROP-20261018-TEST01")
+    assert old_p.is_consumed is True
+
+    # Active pending proposal is now prop2
+    active_p = temp_storage.get_pending_proposal_for_session("session_prop_1")
+    assert active_p is not None
+    assert active_p.proposal_id == "PROP-20261018-TEST02"
+
+    # 3. Atomic consumption (Idempotency test)
+    first_consume = temp_storage.consume_proposal("PROP-20261018-TEST02")
+    assert first_consume is True
+
+    # Second consume must return False (already consumed)
+    second_consume = temp_storage.consume_proposal("PROP-20261018-TEST02")
+    assert second_consume is False
+
+    # Non-existent proposal consumption returns False
+    fake_consume = temp_storage.consume_proposal("NON_EXISTENT")
+    assert fake_consume is False
+
+    # Now no pending proposal for session
+    assert temp_storage.get_pending_proposal_for_session("session_prop_1") is None

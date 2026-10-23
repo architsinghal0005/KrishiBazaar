@@ -1,4 +1,4 @@
-"""
+﻿"""
 Mandi Price Service for KrishiBazaar.
 Integrates with the official Indian Open Government Data (data.gov.in / AGMARKNET)
 daily mandi price dataset (Resource ID: 9ef84268-d588-465a-a308-a864a43d0070).
@@ -492,7 +492,7 @@ def validate_mandi_price(
 ) -> tuple[bool, str | None]:
     """
     Validate commodity price for sanity, unit mismatch, or clerical entry errors.
-    Flags modal prices < ₹100/quintal as suspicious (such as ₹13 or ₹15 per quintal,
+    Flags modal prices < â‚¹100/quintal as suspicious (such as â‚¹13 or â‚¹15 per quintal,
     which in APMCs are clerical errors, unit mismatch for bundle/bunch, or per-kg typos).
     Returns (is_suspicious: bool, suspicion_reason: str | None).
     """
@@ -518,19 +518,19 @@ def validate_mandi_price(
     return False, None
 
 
-def _fetch_via_curl_subprocess(params: dict[str, Any], timeout_secs: int = 25) -> dict[str, Any] | None:
+def _fetch_via_curl_subprocess(params: dict[str, Any], timeout_secs: int = 4) -> dict[str, Any] | None:
     """Subprocess curl fallback for Windows environments where Python socket TLS might be blocked."""
     try:
         args = [
             "curl.exe", "-sS", "-G",
-            "--connect-timeout", "10",
+            "--connect-timeout", "3",
             "--max-time", str(timeout_secs),
             "-w", "\nHTTP_STATUS:%{http_code}",
         ]
         for k, v in params.items():
             args.extend(["--data-urlencode", f"{k}={v}"])
         args.append(DATAGOV_MANDI_RESOURCE_URL)
-        res = subprocess.run(args, capture_output=True, text=True, timeout=timeout_secs + 5)
+        res = subprocess.run(args, capture_output=True, text=True, timeout=timeout_secs + 2)
         body, _, status = res.stdout.rpartition("\nHTTP_STATUS:")
         if status.strip() == "200" and body:
             return json.loads(body)
@@ -634,14 +634,14 @@ async def get_mandi_prices_async(
                 DATAGOV_MANDI_RESOURCE_URL,
                 params=params,
                 headers=DATAGOV_REQUEST_HEADERS,
-                timeout=15.0,
+                timeout=4.0,
             )
             if resp.status_code == 200:
                 data = resp.json()
             else:
                 http_error_msg = f"HTTP {resp.status_code}: {resp.text[:120]}"
         else:
-            async with httpx.AsyncClient(headers=DATAGOV_REQUEST_HEADERS, timeout=15.0) as session:
+            async with httpx.AsyncClient(headers=DATAGOV_REQUEST_HEADERS, timeout=4.0) as session:
                 resp = await session.get(DATAGOV_MANDI_RESOURCE_URL, params=params)
                 if resp.status_code == 200:
                     data = resp.json()
@@ -651,7 +651,7 @@ async def get_mandi_prices_async(
     except (httpx.TimeoutException, httpx.ConnectError) as transport_err:
         logger.warning(f"httpx connection/timeout to data.gov.in: {transport_err}. Attempting curl fallback...")
         if client is None:
-            data = await asyncio.to_thread(_fetch_via_curl_subprocess, params)
+            data = await asyncio.to_thread(_fetch_via_curl_subprocess, params, 4)
         if data is None:
             http_error_msg = f"Transport timeout: {str(transport_err)}"
     except Exception as ex:
@@ -816,4 +816,3 @@ def get_mandi_prices(
             disclaimer="Live API request failed. No data retrieved.",
         ),
     )
-

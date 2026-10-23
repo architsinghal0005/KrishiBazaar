@@ -1,4 +1,4 @@
-"""
+﻿"""
 Unit tests for root services proxy imports.
 Ensures that `services.mandi_service`, `services.weather_service`, and `services.optimizer`
 are directly importable as requested in Phase 4 specification.
@@ -20,3 +20,11 @@ def test_root_services_proxies_importable():
 
     assert hasattr(root_opt, "calculate_channel_net_return")
     assert hasattr(root_opt, "optimize_sales_channels")
+
+    import services.buyer_service as root_buyer
+    import services.transport_service as root_trans
+
+    assert hasattr(root_buyer, "get_buyer_offers")
+    assert hasattr(root_buyer, "get_buyer_offers_async")
+    assert hasattr(root_trans, "get_transport_quotes")
+    assert hasattr(root_trans, "get_transport_quotes_async")

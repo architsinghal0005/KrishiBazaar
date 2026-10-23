@@ -1,10 +1,11 @@
-"""
+﻿"""
 Structured Intent Extraction Service using the ASI:One Developer API.
 Converts a farmer's natural-language inquiry into validated Pydantic models.
 Gracefully handles missing credentials, network timeouts, malformed JSON, and rate limits.
 """
 
 from __future__ import annotations
+import asyncio
 import json
 import logging
 import re
@@ -66,7 +67,7 @@ KNOWN_CROPS = {
 }
 
 
-def _extract_via_rules(text: str) -> FarmerIntent:
+def _extract_via_rules(text: str, source: str = "rule_based_fallback") -> FarmerIntent:
     """
     Deterministic rule-based heuristic extractor used as an offline or fallback engine.
     Ensures zero crashes when ASI:One credentials are absent or remote API is unreachable.
@@ -156,7 +157,7 @@ def _extract_via_rules(text: str) -> FarmerIntent:
         selling_deadline=deadline,
         minimum_net_return_inr=min_return,
         storage_preference=storage,
-        extraction_source="rule_based_fallback",
+        extraction_source=source,
     )
     return intent.evaluate_completeness()
 
@@ -197,10 +198,13 @@ async def extract_farmer_intent_async(
     user_text: str,
     api_key: str | None = None,
     client: httpx.AsyncClient | None = None,
+    max_retries: int = 1,
+    backoff_seconds: float = 0.5,
 ) -> FarmerIntent:
     """
     Extract structured farmer intent from natural language using ASI:One API.
-    Falls back gracefully to rule-based parser on network failure or missing API key.
+    Performs bounded retries with backoff on transient errors (e.g. HTTP 500/502/503/504).
+    Falls back gracefully and explicitly to rule-based parser on persistent failure or missing API key.
     """
     effective_key = api_key or settings.asi_one_api_key
 
@@ -223,67 +227,109 @@ async def extract_farmer_intent_async(
         "temperature": 0.0,
     }
 
-    try:
-        # Use provided client or instantiate a temporary one
-        if client:
-            resp = await client.post(
-                endpoint,
-                headers=headers,
-                json=payload,
-                timeout=settings.asi_one_timeout_seconds,
-            )
-        else:
-            async with httpx.AsyncClient() as session:
-                resp = await session.post(
+    max_attempts = 1 + max(0, max_retries)
+    last_status: int | None = None
+
+    for attempt in range(max_attempts):
+        try:
+            # Use provided client or instantiate a temporary one
+            if client:
+                resp = await client.post(
                     endpoint,
                     headers=headers,
                     json=payload,
                     timeout=settings.asi_one_timeout_seconds,
                 )
-
-        if resp.status_code == 200:
-            result = resp.json()
-            message_content = (
-                result.get("choices", [{}])[0].get("message", {}).get("content", "")
-            )
-            parsed = _sanitize_and_parse_json(message_content)
-
-            if parsed is not None:
-                # Build validated Pydantic model
-                intent = FarmerIntent(
-                    crop=parsed.get("crop"),
-                    quantity_quintals=parsed.get("quantity_quintals"),
-                    origin_location=parsed.get("origin_location"),
-                    selling_deadline=parsed.get("selling_deadline"),
-                    minimum_net_return_inr=parsed.get("minimum_net_return_inr"),
-                    storage_preference=parsed.get("storage_preference"),
-                    extraction_source="asi1",
-                )
-                return intent.evaluate_completeness()
             else:
-                logger.warning(
-                    f"ASI:One returned non-JSON content. Falling back to rule-based parser: {message_content[:100]}"
+                async with httpx.AsyncClient() as session:
+                    resp = await session.post(
+                        endpoint,
+                        headers=headers,
+                        json=payload,
+                        timeout=settings.asi_one_timeout_seconds,
+                    )
+
+            last_status = resp.status_code
+
+            if resp.status_code == 200:
+                result = resp.json()
+                message_content = (
+                    result.get("choices", [{}])[0].get("message", {}).get("content", "")
                 )
-                fallback = _extract_via_rules(user_text)
-                return fallback
-        elif resp.status_code == 401:
-            logger.error("ASI:One API returned 401 Unauthorized. Verify ASI_ONE_API_KEY.")
-            return _extract_via_rules(user_text)
-        elif resp.status_code == 429:
-            logger.warning("ASI:One API rate limit exceeded (HTTP 429). Falling back to rule-based parser.")
-            return _extract_via_rules(user_text)
-        else:
-            logger.error(f"ASI:One API error HTTP {resp.status_code}: {resp.text[:120]}")
+                parsed = _sanitize_and_parse_json(message_content)
+
+                if parsed is not None:
+                    # Build validated Pydantic model
+                    intent = FarmerIntent(
+                        crop=parsed.get("crop"),
+                        quantity_quintals=parsed.get("quantity_quintals"),
+                        origin_location=parsed.get("origin_location"),
+                        selling_deadline=parsed.get("selling_deadline"),
+                        minimum_net_return_inr=parsed.get("minimum_net_return_inr"),
+                        storage_preference=parsed.get("storage_preference"),
+                        extraction_source="asi1",
+                    )
+                    return intent.evaluate_completeness()
+                else:
+                    logger.warning(
+                        f"ASI:One returned non-JSON content. Falling back to rule-based parser: {message_content[:100]}"
+                    )
+                    return _extract_via_rules(user_text)
+
+            elif resp.status_code in (500, 502, 503, 504):
+                if attempt < max_attempts - 1:
+                    logger.warning(
+                        f"ASI:One API returned HTTP {resp.status_code}. Retrying in {backoff_seconds}s "
+                        f"(attempt {attempt + 1}/{max_attempts})..."
+                    )
+                    await asyncio.sleep(backoff_seconds)
+                    continue
+                logger.warning(
+                    f"ASI:One API failed with HTTP {resp.status_code} after {max_attempts} attempts. "
+                    "Falling back to rule-based extractor."
+                )
+                return _extract_via_rules(
+                    user_text,
+                    source=f"rule_based_fallback (ASI:One HTTP {resp.status_code})",
+                )
+
+            elif resp.status_code == 401:
+                logger.error("ASI:One API returned 401 Unauthorized. Verify ASI_ONE_API_KEY.")
+                return _extract_via_rules(user_text)
+
+            elif resp.status_code == 429:
+                logger.warning("ASI:One API rate limit exceeded (HTTP 429). Falling back to rule-based parser.")
+                return _extract_via_rules(user_text)
+
+            else:
+                logger.error(f"ASI:One API error HTTP {resp.status_code}: {resp.text[:120]}")
+                return _extract_via_rules(
+                    user_text,
+                    source=f"rule_based_fallback (ASI:One HTTP {resp.status_code})",
+                )
+
+        except httpx.TimeoutException:
+            if attempt < max_attempts - 1:
+                logger.warning(
+                    f"ASI:One API timed out after {settings.asi_one_timeout_seconds}s. "
+                    f"Retrying in {backoff_seconds}s (attempt {attempt + 1}/{max_attempts})..."
+                )
+                await asyncio.sleep(backoff_seconds)
+                continue
+            logger.warning(
+                f"ASI:One API timed out after {max_attempts} attempts. Falling back to rule-based parser."
+            )
             return _extract_via_rules(user_text)
 
-    except httpx.TimeoutException:
-        logger.warning(
-            f"ASI:One API timed out after {settings.asi_one_timeout_seconds}s. Falling back to rule-based parser."
-        )
-        return _extract_via_rules(user_text)
-    except Exception as ex:
-        logger.error(f"Unexpected error calling ASI:One API: {type(ex).__name__} - {str(ex)}")
-        return _extract_via_rules(user_text)
+        except Exception as ex:
+            logger.error(f"Unexpected error calling ASI:One API: {type(ex).__name__} - {str(ex)}")
+            return _extract_via_rules(user_text)
+
+    # Fallback if loop finishes without returning
+    return _extract_via_rules(
+        user_text,
+        source=f"rule_based_fallback (ASI:One HTTP {last_status})" if last_status else "rule_based_fallback",
+    )
 
 
 def extract_farmer_intent(user_text: str, api_key: str | None = None) -> FarmerIntent:

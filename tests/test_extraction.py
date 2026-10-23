@@ -1,4 +1,4 @@
-"""
+﻿"""
 Unit tests for ASI:One structured intent extraction (tests/test_extraction.py).
 Mocks HTTP API calls to verify model parsing, error handling, rate limits, timeouts, and fallbacks.
 """
@@ -197,3 +197,67 @@ def test_sync_extract_farmer_intent():
     assert intent.quantity_quintals == 50.0
     assert intent.origin_location == "Nashik"
     assert intent.minimum_net_return_inr == 85000.0
+
+
+@pytest.mark.asyncio
+async def test_extract_intent_asi1_http_500_retry_succeeds():
+    """Verify that transient HTTP 500 triggers retry and succeeds on subsequent attempt."""
+    mock_resp_500 = MagicMock()
+    mock_resp_500.status_code = 500
+    mock_resp_500.text = "Internal Server Error"
+
+    mock_resp_200 = MagicMock()
+    mock_resp_200.status_code = 200
+    mock_resp_200.json.return_value = {
+        "choices": [
+            {
+                "message": {
+                    "content": (
+                        '{"crop": "onion", "quantity_quintals": 50.0, "origin_location": "Nashik", '
+                        '"selling_deadline": "tomorrow", "minimum_net_return_inr": 85000.0, '
+                        '"storage_preference": null}'
+                    )
+                }
+            }
+        ]
+    }
+
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    # First call returns 500, second call returns 200
+    mock_client.post.side_effect = [mock_resp_500, mock_resp_200]
+
+    text = "I have 50 quintals of onions in Nashik, and I want at least INR 85000 net by tomorrow."
+    intent = await extract_farmer_intent_async(
+        text, api_key="test_api_key_123", client=mock_client, backoff_seconds=0.01
+    )
+
+    assert mock_client.post.await_count == 2
+    assert intent.crop == "onion"
+    assert intent.quantity_quintals == 50.0
+    assert intent.origin_location == "Nashik"
+    assert intent.extraction_source == "asi1"
+    assert intent.is_complete is True
+
+
+@pytest.mark.asyncio
+async def test_extract_intent_asi1_http_500_persistent_fallback():
+    """Verify that persistent HTTP 500 falls back gracefully to rule-based parser with explicit provenance."""
+    mock_resp_500 = MagicMock()
+    mock_resp_500.status_code = 500
+    mock_resp_500.text = "Internal Server Error"
+
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    # Both calls return 500
+    mock_client.post.side_effect = [mock_resp_500, mock_resp_500]
+
+    text = "50 quintals of onions in Nashik"
+    intent = await extract_farmer_intent_async(
+        text, api_key="test_api_key_123", client=mock_client, backoff_seconds=0.01
+    )
+
+    assert mock_client.post.await_count == 2
+    assert intent.crop == "onion"
+    assert intent.quantity_quintals == 50.0
+    assert intent.origin_location == "Nashik"
+    assert "rule_based_fallback" in intent.extraction_source
+    assert "500" in intent.extraction_source

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Pydantic Domain Models for KrishiBazaar.
 Defines structured schemas for farmer inquiries, mandi evidence, weather risk,
 buyer offers, transport quotes, deterministic net-return breakdowns, and booking records.
@@ -6,7 +6,8 @@ buyer offers, transport quotes, deterministic net-return breakdowns, and booking
 
 from __future__ import annotations
 from datetime import datetime, timezone
-from typing import Literal
+from enum import Enum
+from typing import Any, Literal
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -14,11 +15,15 @@ class FarmerInquiry(BaseModel):
     """Farmer inquiry parsed from conversation."""
 
     farmer_id: str = Field(..., description="Unique identifier or handle of the farmer")
-    crop: str = Field(..., description="Target agricultural crop name (e.g. Onion, Wheat, Tomato)")
-    quantity_quintals: float = Field(..., gt=0, description="Crop quantity in quintals (1 quintal = 100 kg)")
-    location_district: str = Field(..., description="Farmer's home district or village")
+    crop: str | None = Field(default=None, description="Target agricultural crop name (e.g. Onion, Wheat, Tomato)")
+    quantity_quintals: float | None = Field(default=None, gt=0, description="Crop quantity in quintals (1 quintal = 100 kg)")
+    location_district: str | None = Field(default=None, description="Farmer's home district or village")
     state: str = Field(default="Maharashtra", description="Indian State")
     max_distance_km: float = Field(default=150.0, gt=0, description="Maximum transport radius in km")
+    selling_deadline: str | None = Field(default=None, description="Preferred selling timeframe or deadline")
+    minimum_net_return_inr: float | None = Field(default=None, description="Farmer target net payout in INR")
+    storage_preference: str | None = Field(default=None, description="Optional storage preference")
+    origin_location: str | None = Field(default=None, description="Original origin location query")
     created_at_utc: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         description="Timestamp of the inquiry",
@@ -26,13 +31,13 @@ class FarmerInquiry(BaseModel):
 
     @field_validator("crop")
     @classmethod
-    def normalize_crop_name(cls, v: str) -> str:
-        return v.strip().title()
+    def normalize_crop_name(cls, v: str | None) -> str | None:
+        return v.strip().title() if v else None
 
     @field_validator("location_district")
     @classmethod
-    def normalize_district(cls, v: str) -> str:
-        return v.strip().title()
+    def normalize_district(cls, v: str | None) -> str | None:
+        return v.strip().title() if v else None
 
 
 class FarmerIntent(BaseModel):
@@ -180,6 +185,12 @@ class WeatherRiskReport(BaseModel):
     )
     transit_advice: str = Field(..., description="Actionable advice for farmer/transporter")
     data_source: str = Field(default="Open-Meteo API", description="Data provider")
+    target_date_requested: str | None = Field(
+        default=None, description="Requested selling or transit date"
+    )
+    is_target_date_matched: bool = Field(
+        default=True, description="True if forecast_date matches requested target date"
+    )
 
 
 class BuyerOffer(BaseModel):
@@ -195,6 +206,10 @@ class BuyerOffer(BaseModel):
     farmgate_pickup: bool = Field(
         default=False,
         description="True if buyer collects at farmer's gate (zero farmer transport)",
+    )
+    is_apmc_exempt: bool = Field(
+        default=True,
+        description="Whether direct buyer trade is assumed exempt from APMC cess and mandi hamali",
     )
     quality_grade: str = Field(default="FAQ (Fair Average Quality)", description="Required quality grade")
     payment_terms: str = Field(default="T+0 Instant Bank Transfer", description="Payment settlement timeline")
@@ -228,6 +243,14 @@ class TransportQuote(BaseModel):
     tarp_cover_included: bool = Field(default=True, description="Waterproof tarpaulin cover included")
     total_transport_cost: float = Field(..., ge=0, description="Total transport cost in INR")
     estimated_transit_hours: float = Field(..., gt=0, description="Estimated transit time in hours")
+    is_simulated: bool = Field(
+        default=True,
+        description="Strict compliance flag: Must be True for benchmark/sample quotes",
+    )
+    disclaimer: str = Field(
+        default="Simulated freight quote for MVP estimation. Not a verified carrier booking.",
+        description="Strict transparency disclaimer",
+    )
 
 
 class DataProvenance(BaseModel):
@@ -251,6 +274,7 @@ class MandiPriceResult(BaseModel):
     records: list[MandiPriceRecord] = Field(default_factory=list, description="Mandi price records")
     error_message: str | None = Field(default=None, description="Error message if failed")
     provenance: DataProvenance = Field(..., description="Data provenance and freshness")
+    request_id: str | None = Field(default=None, description="Correlation / request ID for end-to-end tracing")
 
 
 class WeatherResult(BaseModel):
@@ -263,6 +287,74 @@ class WeatherResult(BaseModel):
     report: WeatherRiskReport | None = Field(default=None, description="Detailed weather and transit hazard report")
     error_message: str | None = Field(default=None, description="Error details if query failed")
     provenance: DataProvenance = Field(..., description="Data provenance and freshness")
+    request_id: str | None = Field(default=None, description="Correlation / request ID for end-to-end tracing")
+
+
+class BuyerOffersResult(BaseModel):
+    """Typed result wrapper for Buyer Offer retrieval."""
+
+    success: bool = Field(..., description="True if query succeeded")
+    crop: str = Field(..., description="Target crop")
+    quantity_quintals: float = Field(default=0.0, description="Quantity in quintals")
+    offers: list[BuyerOffer] = Field(default_factory=list, description="List of buyer offers")
+    error_message: str | None = Field(default=None, description="Error details if query failed")
+    provenance: DataProvenance = Field(..., description="Data provenance and simulation status")
+    request_id: str | None = Field(default=None, description="Correlation / request ID for end-to-end tracing")
+
+
+class TransportQuotesResult(BaseModel):
+    """Typed result wrapper for Transport Quotes retrieval."""
+
+    success: bool = Field(..., description="True if query succeeded")
+    origin: str = Field(..., description="Farmer origin location")
+    quantity_quintals: float = Field(default=0.0, description="Quantity in quintals")
+    quotes: dict[str, TransportQuote] = Field(
+        default_factory=dict, description="Destination to TransportQuote map"
+    )
+    error_message: str | None = Field(default=None, description="Error details if query failed")
+    provenance: DataProvenance = Field(..., description="Data provenance and simulation status")
+    request_id: str | None = Field(default=None, description="Correlation / request ID for end-to-end tracing")
+
+
+class MarketQuery(BaseModel):
+    """Query message for Market specialist agent."""
+
+    commodity: str = Field(..., description="Target agricultural crop name")
+    district: str | None = Field(default=None, description="Target district")
+    state: str | None = Field(default="Maharashtra", description="Target state")
+    request_id: str | None = Field(default=None, description="Correlation / request ID for end-to-end tracing")
+
+
+class WeatherQuery(BaseModel):
+    """Query message for Weather specialist agent."""
+
+    location: str = Field(..., description="Farmer or mandi location")
+    target_date: str | None = Field(
+        default=None, description="Requested transit or selling deadline date (YYYY-MM-DD)"
+    )
+    latitude: float | None = Field(default=None, description="Latitude")
+    longitude: float | None = Field(default=None, description="Longitude")
+    request_id: str | None = Field(default=None, description="Correlation / request ID for end-to-end tracing")
+
+
+class BuyerQuery(BaseModel):
+    """Query message for Buyer specialist agent."""
+
+    crop: str = Field(..., description="Target crop")
+    quantity_quintals: float = Field(..., gt=0, description="Quantity in quintals")
+    origin_location: str = Field(..., description="Farmer origin location")
+    price_hint: float | None = Field(default=None, description="Optional baseline price hint in INR")
+    request_id: str | None = Field(default=None, description="Correlation / request ID for end-to-end tracing")
+
+
+class TransportQuery(BaseModel):
+    """Query message for Transport specialist agent."""
+
+    origin: str = Field(..., description="Farmer origin location")
+    destinations: list[str] = Field(..., description="List of candidate destinations")
+    quantity_quintals: float = Field(..., gt=0, description="Quantity in quintals")
+    weather_hazard_level: str = Field(default="LOW", description="Weather hazard level (LOW/MEDIUM/HIGH)")
+    request_id: str | None = Field(default=None, description="Correlation / request ID for end-to-end tracing")
 
 
 class NetReturnBreakdown(BaseModel):
@@ -301,6 +393,20 @@ class NetReturnBreakdown(BaseModel):
     net_return: float = Field(default=0.0, description="Alias for expected_net_return")
     net_return_per_quintal: float = Field(
         default=0.0, description="Net return divided by quantity (INR/quintal)"
+    )
+
+    # Provenance and assumption labels
+    price_provenance: str = Field(default="", description="Source provenance of price input")
+    is_price_simulated: bool = Field(default=False, description="True if price is a simulated benchmark")
+    transport_provenance: str = Field(default="Simulated freight tariff", description="Provenance of transport input")
+    charges_provenance: str = Field(default="Assumed standard statutory rates", description="Provenance of market charges")
+    is_apmc_exempt: bool = Field(
+        default=False,
+        description="Whether APMC cess and mandi labor exemption assumption was applied",
+    )
+    weather_loss_note: str = Field(
+        default="",
+        description="Detailed explanation of transit weather spoilage calculation and mitigation",
     )
 
     # Ranking & Evaluation
@@ -343,6 +449,27 @@ class OptimizationResult(BaseModel):
     recommended_option: NetReturnBreakdown | None = Field(default=None, description="Highest ranking option")
     summary_explanation: str = Field(default="", description="Detailed narrative explaining ranking")
 
+
+
+class BookingProposal(BaseModel):
+    """Pending booking proposal awaiting explicit farmer confirmation."""
+
+    proposal_id: str = Field(..., description="Unique proposal identifier (e.g. PROP-20261018-ABCD)")
+    session_id: str = Field(..., description="Farmer session ID this proposal belongs to")
+    farmer_id: str = Field(..., description="Farmer identifier or handle")
+    selected_option: NetReturnBreakdown = Field(..., description="Full net-return breakdown of the proposed channel")
+    crop: str = Field(..., description="Target agricultural crop name")
+    quantity_quintals: float = Field(..., gt=0, description="Produce quantity in quintals")
+    origin_location: str = Field(..., description="Farmer origin / pickup location")
+    destination_name: str = Field(..., description="Mandi or buyer delivery destination")
+    channel_type: Literal["MANDI", "DIRECT_BUYER"] = Field(..., description="Sales channel type")
+    transit_date: str = Field(..., description="Scheduled pickup or transit date (YYYY-MM-DD)")
+    estimated_gross_value: float = Field(..., ge=0, description="Gross value in INR")
+    itemized_deductions: float = Field(..., ge=0, description="Total deductions in INR")
+    estimated_net_payout: float = Field(..., description="Estimated net return in INR")
+    created_at_utc: str = Field(..., description="ISO 8601 UTC timestamp of creation")
+    expires_at_utc: str = Field(..., description="ISO 8601 UTC timestamp of expiration")
+    is_consumed: bool = Field(default=False, description="True once confirmed, cancelled, or superseded")
 
 
 class BookingRequest(BaseModel):
@@ -388,3 +515,114 @@ class BookingRecord(BaseModel):
         description="Strict compliance flag: Must be True for test/simulated bookings",
     )
     notes: str = Field(default="", description="Audit notes and instructions")
+
+
+# =====================================================================
+# Fetch.ai Agent Payment Protocol Models & KrishiBazaar Payment Subsystem
+# =====================================================================
+
+from uagents_core.contrib.protocols.payment import (
+    Funds,
+    RequestPayment,
+    CommitPayment,
+    RejectPayment,
+    CancelPayment,
+    CompletePayment,
+    payment_protocol_spec,
+)
+
+
+class PaymentStatus(str, Enum):
+    """Lifecycle statuses for the Fetch.ai Agent Payment Protocol subsystem."""
+
+    REQUESTED = "REQUESTED"
+    AWAITING_AUTHORIZATION = "AWAITING_AUTHORIZATION"
+    SUBMITTING = "SUBMITTING"
+    REJECTED = "REJECTED"
+    COMMITTED = "COMMITTED"
+    PENDING_SETTLEMENT = "PENDING_SETTLEMENT"
+    AWAITING_RECONCILIATION = "AWAITING_RECONCILIATION"
+    SETTLED = "SETTLED"
+    CANCELLED = "CANCELLED"
+    FAILED = "FAILED"
+
+
+class PaymentPurpose(str, Enum):
+    """Credible demonstration service monetization purposes."""
+
+    ADVISORY_PASS = "KRISHIBAZAAR_PREMIUM_ADVISORY_PASS"
+    MARKET_INTELLIGENCE = "KRISHIBAZAAR_MARKET_INTELLIGENCE"
+    ROUTE_OPTIMIZATION = "KRISHIBAZAAR_ROUTE_OPTIMIZATION"
+
+
+class ExplicitPaymentApproval(BaseModel):
+    """
+    Validated explicit human payment authorization.
+    Strictly ties human approval to reference, amount, currency, recipient, and optional payer.
+    """
+
+    reference: str = Field(..., description="Unique payment request reference ID")
+    amount_base_units: int = Field(..., gt=0, description="Exact amount in integer base units")
+    currency: str = Field(..., description="Token denomination / currency string (e.g. atestfet, FET)")
+    recipient: str = Field(..., description="Designated recipient wallet address")
+    payer: str | None = Field(default=None, description="Optional payer identifier")
+
+
+class PaymentReviewDetails(BaseModel):
+    """Human-readable presentation review card for approval before transaction submission."""
+
+    reference: str = Field(..., description="Payment reference")
+    purpose: str = Field(..., description="Clearly designated service purpose")
+    amount_base_units: int = Field(..., gt=0, description="Amount in integer base units")
+    amount_display: str = Field(..., description="User-friendly display amount (e.g. '0.000001 FET (1000 atestfet)')")
+    currency: str = Field(..., description="Denomination")
+    recipient_address: str = Field(..., description="Designated payee wallet address (fetch1...)")
+    network: str = Field(..., description="Target network (e.g. dorado-1 / testnet)")
+    estimated_fee: str = Field(default="Standard network fee (~0.001 FET)", description="Estimated gas fee")
+    deadline_seconds: int = Field(..., description="Validity window in seconds")
+    approval_command_template: str = Field(
+        ...,
+        description="Exact command the user must submit to authorize payment",
+    )
+    payer_balance_status: str = Field(
+        default="UNCHECKED (Preflight check pending)",
+        description="Live balance verification status of designated payer wallet on Dorado testnet",
+    )
+    testnet_notice: str = Field(
+        default="âš ï¸ TESTNET DEMO MICRO-FEE ONLY. No real fiat or bank funds debited.",
+        description="Prominent testnet safety notice",
+    )
+
+
+class PaymentRecord(BaseModel):
+    """
+    Independent persistent payment record stored in SQLite payment ledger.
+    Completely isolated from booking records.
+    """
+
+    payment_reference: str = Field(..., description="Unique payment tracking reference ID")
+    service_inquiry_id: str | None = Field(default=None, description="Linked inquiry ID if applicable")
+    purpose: str = Field(..., description="Clearly labelled demonstration service purpose")
+    payer_agent_address: str = Field(..., description="Payer uAgents address")
+    payer_wallet_address: str = Field(..., description="Payer ledger wallet address (fetch1...)")
+    payee_agent_address: str = Field(..., description="Payee uAgents address")
+    payee_wallet_address: str = Field(..., description="Designated payee ledger wallet address (fetch1...)")
+    amount_base_units: int = Field(..., gt=0, description="Amount in integer base units (never float)")
+    amount_display: str = Field(..., description="Formatted display amount")
+    currency: str = Field(..., description="Token currency denomination (e.g. atestfet)")
+    network: str = Field(..., description="Network identifier (e.g. dorado-1)")
+    status: PaymentStatus = Field(
+        default=PaymentStatus.REQUESTED,
+        description="Current authoritative payment lifecycle state",
+    )
+    tx_hash: str | None = Field(default=None, description="Authoritative on-chain transaction hash")
+    tx_height: int | None = Field(default=None, description="Authoritative block height")
+    actual_fee_base_units: int | None = Field(default=None, description="Actual on-chain transaction fee in base units")
+    actual_fee_display: str | None = Field(default=None, description="Formatted display of actual gas fee paid")
+    deadline_seconds: int = Field(default=300, ge=10, description="Expiration deadline in seconds")
+    created_at_utc: str = Field(..., description="ISO 8601 UTC creation timestamp")
+    updated_at_utc: str = Field(..., description="ISO 8601 UTC last update timestamp")
+    verified_at_utc: str | None = Field(default=None, description="Authoritative settlement verification timestamp")
+    rejection_reason: str | None = Field(default=None, description="Reason if payment was rejected")
+    cancellation_reason: str | None = Field(default=None, description="Reason if payment was cancelled")
+    metadata: dict[str, str] = Field(default_factory=dict, description="Custom metadata dictionary")

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Unit tests for configuration loading and validation (tests/test_config.py).
 """
 
@@ -13,7 +13,18 @@ def test_default_settings_valid():
     assert cfg.log_level in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL")
     assert 1024 <= cfg.orchestrator_port <= 65535
     assert 1024 <= cfg.market_agent_port <= 65535
+    assert 1024 <= cfg.buyer_b_agent_port <= 65535
+    assert cfg.buyer_b_agent_port == 8005
     assert len(cfg.orchestrator_seed) >= 8
+    assert len(cfg.buyer_b_agent_seed) >= 8
+    # Specialist agent addresses default to None (empty for local dev)
+    assert cfg.market_agent_address is None
+    assert cfg.weather_agent_address is None
+    assert cfg.buyer_agent_address is None
+    assert cfg.buyer_b_agent_address is None
+    assert cfg.transport_agent_address is None
+    assert cfg.allow_direct_service_fallback is True
+    assert cfg.report_events is False
 
 
 def test_invalid_port_validation():

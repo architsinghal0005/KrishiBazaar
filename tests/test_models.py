@@ -1,4 +1,4 @@
-"""
+﻿"""
 Unit tests for KrishiBazaar domain models (tests/test_models.py).
 """
 
@@ -67,9 +67,13 @@ def test_weather_risk_report():
         wind_speed_max_kmh=18.0,
         spoilage_hazard_level="MEDIUM",
         transit_advice="Use waterproof tarpaulin cover to protect produce from rain.",
+        target_date_requested="2026-10-18",
+        is_target_date_matched=True,
     )
     assert weather.spoilage_hazard_level == "MEDIUM"
     assert weather.precipitation_sum_mm == 12.4
+    assert weather.target_date_requested == "2026-10-18"
+    assert weather.is_target_date_matched is True
 
 
 def test_buyer_offer_simulation_disclaimer():
@@ -123,9 +127,16 @@ def test_net_return_breakdown():
         net_return=95000.0,
         net_return_per_quintal=1900.0,
         rank=1,
+        price_provenance="Live data.gov.in AGMARKNET modal price benchmark",
+        is_price_simulated=False,
+        transport_provenance="Simulated model quote",
+        charges_provenance="Assumed APMC statutory cess (1.5%) + assumed hamali labor (INR 25/qtl)",
     )
     assert breakdown.net_return == 95000.0
     assert breakdown.net_return_per_quintal == 1900.0
+    assert "AGMARKNET" in breakdown.price_provenance
+    assert breakdown.is_price_simulated is False
+    assert "Assumed" in breakdown.charges_provenance
 
 
 def test_booking_models_and_approval():
@@ -186,4 +197,3 @@ def test_farmer_intent_model_validation_and_followup():
     assert "origin_location" in partial.missing_fields
     assert partial.follow_up_question is not None
     assert "Tomato" in partial.follow_up_question
-
