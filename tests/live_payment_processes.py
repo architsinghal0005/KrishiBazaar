@@ -1,4 +1,4 @@
-﻿"""
+"""
 Live agent subprocess runner for Phase 9C Payment Protocol integration testing.
 Runs a standalone uAgents agent process with official payment_protocol_spec attached
 in either 'buyer' (payer) or 'seller' (payee) role.
@@ -13,6 +13,13 @@ import os
 import sys
 import time
 from pathlib import Path
+
+import asyncio
+try:
+    asyncio.get_event_loop()
+except RuntimeError:
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
 
 import uagents.network
 uagents.network.AlmanacContract.check_version = lambda self: False

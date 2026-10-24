@@ -748,9 +748,14 @@ def format_proposal_summary(proposal: BookingProposal) -> list[str]:
         lines.append(
             f"  - APMC Statutory Cess: INR 0.00 [Assumed direct-buyer trade exemption outside APMC yard; unverified assumption, not legally verified]"
         )
-        lines.append(
-            f"  - Hamali/Labor: INR 0.00 [Assumed direct farmgate/buyer handling without APMC market labor charge; unverified assumption]"
-        )
+        if top.loading_unloading_cost > 0.0:
+            lines.append(
+                f"  - Hamali/Labor: INR {top.loading_unloading_cost:,.2f} [Assumed buyer doorstep handling/weighment labor charge]"
+            )
+        else:
+            lines.append(
+                f"  - Hamali/Labor: INR 0.00 [Assumed direct farmgate/buyer handling without APMC market labor charge; unverified assumption]"
+            )
     else:
         lines.append(f"  - APMC Statutory Cess: INR {top.mandi_cess_apmc:,.2f} [Assumed statutory tariff @ 1.5%]")
         lines.append(f"  - Hamali/Labor: INR {top.loading_unloading_cost:,.2f} [Assumed standard labor charge @ INR 25/qtl]")

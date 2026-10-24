@@ -189,6 +189,8 @@ class StorageEngine:
         active_proposal_id: str | None = None,
         active_booking_id: str | None = None,
         clear_pending_payment: bool = False,
+        clear_active_proposal: bool = False,
+        clear_active_booking: bool = False,
     ) -> None:
         """Persist or update farmer session state."""
         now = datetime.now(timezone.utc).isoformat()
@@ -201,6 +203,12 @@ class StorageEngine:
         if pending_payment_reference == "":
             clear_pending_payment = True
             pending_payment_reference = None
+        if active_proposal_id == "":
+            clear_active_proposal = True
+            active_proposal_id = None
+        if active_booking_id == "":
+            clear_active_booking = True
+            active_booking_id = None
 
         with self._get_connection() as conn:
             cursor = conn.cursor()
@@ -217,8 +225,14 @@ class StorageEngine:
                         WHEN ? THEN NULL
                         ELSE COALESCE(excluded.pending_payment_reference, farmer_sessions.pending_payment_reference)
                     END,
-                    active_proposal_id = COALESCE(excluded.active_proposal_id, farmer_sessions.active_proposal_id),
-                    active_booking_id = COALESCE(excluded.active_booking_id, farmer_sessions.active_booking_id),
+                    active_proposal_id = CASE
+                        WHEN ? THEN NULL
+                        ELSE COALESCE(excluded.active_proposal_id, farmer_sessions.active_proposal_id)
+                    END,
+                    active_booking_id = CASE
+                        WHEN ? THEN NULL
+                        ELSE COALESCE(excluded.active_booking_id, farmer_sessions.active_booking_id)
+                    END,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -233,6 +247,8 @@ class StorageEngine:
                     now,
                     now,
                     1 if clear_pending_payment else 0,
+                    1 if clear_active_proposal else 0,
+                    1 if clear_active_booking else 0,
                 ),
             )
             conn.commit()

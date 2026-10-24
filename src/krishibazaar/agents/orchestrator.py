@@ -417,10 +417,16 @@ def format_optimization_report(
             else "APMC Mandi (Benchmark Rate)"
         )
         feasibility_mark = "✅ Meets Target" if opt_item.meets_minimum_condition else "⚠️ Below Minimum"
+        trans_str = f"INR {opt_item.transport_cost:,.2f}" if opt_item.transport_cost > 0 else "INR 0.00 (Farmgate Pickup)"
+        cess_str = f"INR {opt_item.mandi_cess_apmc:,.2f}" if opt_item.mandi_cess_apmc > 0 else "INR 0.00 (Assumed Direct-Trade Exemption - Unverified)"
+        hamali_str = f"INR {opt_item.loading_unloading_cost:,.2f}" if opt_item.loading_unloading_cost > 0 else "INR 0.00 (Assumed Farmgate Handling - Unverified)"
         lines.append(
             f"• **{badge}: {opt_item.destination_name}** [{channel_lbl}] — "
             f"Est. Net Return: **INR {opt_item.expected_net_return:,.2f}** "
-            f"(INR {opt_item.net_return_per_quintal:,.2f}/qtl) — {feasibility_mark}"
+            f"(INR {opt_item.net_return_per_quintal:,.2f}/qtl) — {feasibility_mark}\n"
+            f"  - Itemized: Gross INR {opt_item.gross_value:,.2f} | Freight {trans_str} | Cess {cess_str} | "
+            f"Hamali/Labor {hamali_str} | Weather Loss INR {opt_item.estimated_loss_cost:,.2f} | "
+            f"Total Deductions -INR {opt_item.total_deductions:,.2f}"
         )
 
     lines.append("")
@@ -453,9 +459,14 @@ def format_optimization_report(
             lines.append(
                 f"  - APMC Statutory Cess: INR 0.00 [Assumed direct-buyer trade exemption outside APMC yard; unverified assumption, not legally verified]"
             )
-            lines.append(
-                f"  - Hamali/Labor: INR 0.00 [Assumed direct farmgate/buyer handling without APMC market labor charge; unverified assumption]"
-            )
+            if top.loading_unloading_cost > 0.0:
+                lines.append(
+                    f"  - Hamali/Labor: INR {top.loading_unloading_cost:,.2f} [Assumed buyer doorstep handling/weighment labor charge]"
+                )
+            else:
+                lines.append(
+                    f"  - Hamali/Labor: INR 0.00 [Assumed direct farmgate/buyer handling without APMC market labor charge; unverified assumption]"
+                )
         else:
             lines.append(
                 f"  - APMC Statutory Cess: INR {top.mandi_cess_apmc:,.2f} [Assumed statutory tariff @ 1.5%]"
@@ -3196,6 +3207,9 @@ async def handle_chat_message(ctx: Context, sender: str, msg: ChatMessage) -> No
                         state="OFFERS_OPTIMIZED",
                         inquiry=inquiry_obj,
                         active_options=opt_res.all_options,
+                        clear_pending_payment=True,
+                        clear_active_proposal=True,
+                        clear_active_booking=True,
                     )
                 except Exception as ex:
                     ctx.logger.warning(f"Failed to persist session: {ex}")

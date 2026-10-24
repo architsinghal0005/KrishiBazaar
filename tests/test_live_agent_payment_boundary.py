@@ -1,4 +1,4 @@
-﻿"""
+"""
 Integration test verifying live Payment Protocol message exchange between separate running agent processes.
 (tests/test_live_agent_payment_boundary.py)
 
@@ -94,54 +94,102 @@ def agent_processes(tmp_path_factory: pytest.TempPathFactory) -> Generator[dict,
         buyer_log,
     ]
 
-    p_seller = subprocess.Popen(cmd_seller, env=env)
-    p_buyer = subprocess.Popen(cmd_buyer, env=env)
+    seller_out_file = tmp_dir / "seller_stdout.log"
+    seller_err_file = tmp_dir / "seller_stderr.log"
+    buyer_out_file = tmp_dir / "buyer_stdout.log"
+    buyer_err_file = tmp_dir / "buyer_stderr.log"
 
-    # Wait for both uvicorn servers to actively listen
+    f_seller_out = open(seller_out_file, "w", encoding="utf-8")
+    f_seller_err = open(seller_err_file, "w", encoding="utf-8")
+    f_buyer_out = open(buyer_out_file, "w", encoding="utf-8")
+    f_buyer_err = open(buyer_err_file, "w", encoding="utf-8")
+
+    p_seller = None
+    p_buyer = None
+
     import socket
-    def wait_for_port(port: int, timeout: float = 45.0) -> None:
+
+    def wait_for_process_and_port(
+        proc: subprocess.Popen,
+        port: int,
+        name: str,
+        err_path: Path,
+        out_path: Path,
+        timeout: float = 30.0,
+    ) -> None:
         start = time.time()
         while time.time() - start < timeout:
+            if proc.poll() is not None:
+                f_seller_err.flush()
+                f_buyer_err.flush()
+                f_seller_out.flush()
+                f_buyer_out.flush()
+                err_content = err_path.read_text(encoding="utf-8", errors="replace") if err_path.exists() else ""
+                out_content = out_path.read_text(encoding="utf-8", errors="replace") if out_path.exists() else ""
+                raise RuntimeError(
+                    f"Agent subprocess '{name}' (port {port}, pid {proc.pid}) exited prematurely with code {proc.returncode}.\n"
+                    f"Captured STDERR:\n{err_content}\nCaptured STDOUT:\n{out_content}"
+                )
             try:
                 with socket.create_connection(("127.0.0.1", port), timeout=0.5):
                     return
             except OSError:
-                time.sleep(0.3)
-        raise TimeoutError(f"Port {port} failed to start within {timeout}s")
+                time.sleep(0.2)
 
-    wait_for_port(SELLER_PORT)
-    wait_for_port(BUYER_PORT)
-
-    resolver = RulesBasedResolver(
-        rules={
-            seller_address: [f"http://127.0.0.1:{SELLER_PORT}/submit"],
-            buyer_address: [f"http://127.0.0.1:{BUYER_PORT}/submit"],
-        }
-    )
-
-    context = {
-        "p_seller": p_seller,
-        "p_buyer": p_buyer,
-        "seller_address": seller_address,
-        "buyer_address": buyer_address,
-        "seller_port": SELLER_PORT,
-        "buyer_port": BUYER_PORT,
-        "buyer_log": buyer_log,
-        "seller_log": seller_log,
-        "resolver": resolver,
-    }
+        f_seller_err.flush()
+        f_buyer_err.flush()
+        err_content = err_path.read_text(encoding="utf-8", errors="replace") if err_path.exists() else ""
+        out_content = out_path.read_text(encoding="utf-8", errors="replace") if out_path.exists() else ""
+        raise TimeoutError(
+            f"Port {port} for agent '{name}' failed to start within {timeout}s.\n"
+            f"Captured STDERR:\n{err_content}\nCaptured STDOUT:\n{out_content}"
+        )
 
     try:
+        p_seller = subprocess.Popen(cmd_seller, env=env, stdout=f_seller_out, stderr=f_seller_err)
+        p_buyer = subprocess.Popen(cmd_buyer, env=env, stdout=f_buyer_out, stderr=f_buyer_err)
+
+        wait_for_process_and_port(p_seller, SELLER_PORT, "seller", seller_err_file, seller_out_file)
+        wait_for_process_and_port(p_buyer, BUYER_PORT, "buyer", buyer_err_file, buyer_out_file)
+
+        resolver = RulesBasedResolver(
+            rules={
+                seller_address: [f"http://127.0.0.1:{SELLER_PORT}/submit"],
+                buyer_address: [f"http://127.0.0.1:{BUYER_PORT}/submit"],
+            }
+        )
+
+        context = {
+            "p_seller": p_seller,
+            "p_buyer": p_buyer,
+            "seller_address": seller_address,
+            "buyer_address": buyer_address,
+            "seller_port": SELLER_PORT,
+            "buyer_port": BUYER_PORT,
+            "buyer_log": buyer_log,
+            "seller_log": seller_log,
+            "resolver": resolver,
+        }
+
         yield context
     finally:
-        p_seller.terminate()
-        p_buyer.terminate()
-        try:
-            p_seller.wait(timeout=5)
-            p_buyer.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            p_seller.kill()
-            p_buyer.kill()
+        for p in (p_seller, p_buyer):
+            if p is not None:
+                try:
+                    p.terminate()
+                except Exception:
+                    pass
+        for p in (p_seller, p_buyer):
+            if p is not None:
+                try:
+                    p.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    p.kill()
+        for f in (f_seller_out, f_seller_err, f_buyer_out, f_buyer_err):
+            try:
+                f.close()
+            except Exception:
+                pass
 
 
 def read_events(log_path: str) -> list[dict]:

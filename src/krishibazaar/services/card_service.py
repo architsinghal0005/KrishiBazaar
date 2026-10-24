@@ -140,6 +140,15 @@ def build_channel_recommendations_card(opt: OptimizationResult) -> MetadataConte
         transport_cost = getattr(option, "transport_cost", 0.0)
         statutory_fees = getattr(option, "applicable_market_charges", 0.0)
         weather_loss = getattr(option, "estimated_loss_cost", 0.0)
+        cess = getattr(option, "mandi_cess_apmc", 0.0)
+        hamali = getattr(option, "loading_unloading_cost", 0.0)
+        gross_val = getattr(option, "gross_value", option.offered_price_per_quintal * getattr(opt, "quantity_quintals", 1.0))
+        total_ded = getattr(option, "total_deductions", round(transport_cost + statutory_fees + weather_loss, 2))
+
+        freight_desc = f"Freight: INR {transport_cost:,.2f}" if transport_cost > 0 else "Freight: INR 0.00 (Farmgate Pickup)"
+        cess_desc = f"APMC Cess: INR {cess:,.2f}" if cess > 0 else "APMC Cess: INR 0.00 (Assumed Direct-Trade Exemption - Unverified)"
+        hamali_desc = f"Hamali/Labor: INR {hamali:,.2f}" if hamali > 0 else "Hamali/Labor: INR 0.00 (Assumed Farmgate Handling - Unverified)"
+
         source_name = getattr(option, "price_provenance", "") or (
             "AGMARKNET Live" if is_mandi else "Simulated Buyer Benchmark"
         )
@@ -153,10 +162,11 @@ def build_channel_recommendations_card(opt: OptimizationResult) -> MetadataConte
         )
 
         secondary_text = (
-            f"Gross: INR {option.offered_price_per_quintal:,.0f}/qtl | "
-            f"Freight: INR {transport_cost:,.0f} | "
-           f"Market charges (cess/hamali): INR {statutory_fees:,.0f} | "
-f"Estimated weather loss: INR {weather_loss:,.0f} | "
+            f"Gross: INR {option.offered_price_per_quintal:,.2f}/qtl (Gross: INR {gross_val:,.2f}) | "
+            f"{freight_desc} | "
+            f"Market charges (cess/hamali): INR {statutory_fees:,.2f} [{cess_desc}, {hamali_desc}] | "
+            f"Estimated weather loss: INR {weather_loss:,.2f} | "
+            f"Total Deductions: INR {total_ded:,.2f} | "
             f"Source: {source_name} ({freshness}) | {mandi_clarification}"
         )
 
@@ -214,7 +224,16 @@ def build_proposal_review_card(proposal: BookingProposal) -> MetadataContent:
     Retains explicit-approval safety gate (requires farmer to click Approve or send affirmative confirmation).
     """
     channel_str = str(proposal.channel_type).upper()
-    weather_loss_val = getattr(proposal.selected_option, "estimated_loss_cost", 0.0)
+    is_mandi_chan = "MANDI" in channel_str
+    opt = proposal.selected_option
+    trans_val = getattr(opt, "transport_cost", 0.0)
+    cess_val = getattr(opt, "mandi_cess_apmc", 0.0)
+    hamali_val = getattr(opt, "loading_unloading_cost", 0.0)
+    weather_loss_val = getattr(opt, "estimated_loss_cost", 0.0)
+
+    trans_str = f"INR {trans_val:,.2f} (Farmgate Pickup)" if trans_val == 0 and not is_mandi_chan else f"INR {trans_val:,.2f}"
+    cess_str = f"INR {cess_val:,.2f} (Assumed Direct-Trade Exemption - Unverified)" if cess_val == 0 and not is_mandi_chan else f"INR {cess_val:,.2f}"
+    hamali_str = f"INR {hamali_val:,.2f} (Assumed Farmgate Handling - Unverified)" if hamali_val == 0 and not is_mandi_chan else f"INR {hamali_val:,.2f}"
     weather_note = f" (Est. transit risk deduction: INR {weather_loss_val:,.2f})" if weather_loss_val > 0 else ""
 
     rows = [
@@ -232,8 +251,24 @@ def build_proposal_review_card(proposal: BookingProposal) -> MetadataContent:
             value=f"INR {proposal.estimated_gross_value:,.2f}",
         ),
         ReviewSummaryRow(
+            label="Transport Freight",
+            value=trans_str,
+        ),
+        ReviewSummaryRow(
+            label="APMC Market Cess",
+            value=cess_str,
+        ),
+        ReviewSummaryRow(
+            label="Hamali / Labour Charges",
+            value=hamali_str,
+        ),
+        ReviewSummaryRow(
+            label="Estimated Weather Spoilage Loss",
+            value=f"INR {weather_loss_val:,.2f}",
+        ),
+        ReviewSummaryRow(
             label="Itemized Deductions",
-            value=f"INR {proposal.itemized_deductions:,.2f} (Freight, APMC Cess, Labour, Spoilage)",
+            value=f"INR {proposal.itemized_deductions:,.2f}",
         ),
         ReviewSummaryRow(
             label="Estimated Net Payout",
