@@ -1,244 +1,407 @@
-# KrishiBazaar (कृषिबाज़ार)
+<div align="center">
 
-> **Autonomous Farm-to-Market Negotiation Agent Network for Indian Farmers**  
-> Built natively for **Fetch.ai ASI:One** conversations using **uAgents**, the **Agent Chat Protocol (ACP)**, and the official **ASI:One Interactive Card Protocol**.
+# 🌾 KrishiBazaar (कृषिबाज़ार)
+
+### Autonomous Farm-to-Market Negotiation Agent Network for Indian Farmers
+
+*Know your true in-pocket return before you sell a single quintal.*
 
 ![tag:innovationlab](https://img.shields.io/badge/innovationlab-3D8BD3)
 ![tag:hackathon](https://img.shields.io/badge/hackathon-5F43F1)
+![Python](https://img.shields.io/badge/python-3.13%20%7C%203.14-3776AB?logo=python&logoColor=white)
+![uAgents](https://img.shields.io/badge/built%20with-uAgents-1B1F3B)
+![ASI:One](https://img.shields.io/badge/chat-ASI%3AOne-5F43F1)
+![Tests](https://img.shields.io/badge/tests-403%20passing-2EA44F)
+![Network](https://img.shields.io/badge/payments-Dorado%20testnet-orange)
+
+**Built natively for [Fetch.ai](https://fetch.ai) ASI:One** using **uAgents**, the **Agent Chat Protocol (ACP)**, and the official **ASI:One Interactive Card Protocol**.
+
+[Overview](#-overview) · [Architecture](#-architecture) · [Agents](#-agentverse-agents) · [Quick Start](#-quick-start) · [Demo](#-demo-walkthrough) · [Safety](#-data-provenance--safety-model) · [Troubleshooting](#-troubleshooting)
+
+</div>
 
 ---
 
-## 1. Overview & Vision
+## 📖 Overview
 
-Indian farmers frequently lose 15% to 35% of their produce value due to information asymmetry, opaque physical mandi commission rates, weather-induced transit spoilage, and unexpected logistics deductions.
+Indian farmers frequently lose **15% to 35%** of their produce value to information asymmetry, opaque mandi commission rates, weather-induced transit spoilage, and unexpected logistics deductions.
 
-**KrishiBazaar** solves this by deploying a collaborative, autonomous network of specialized uAgents that negotiate and compute the farmer's true in-pocket **net financial return**:
+**KrishiBazaar** deploys a collaborative network of specialized uAgents that negotiate on the farmer's behalf and compute the true **net financial return**:
 
-$$\text{Net Return} = (\text{Produce Quantity} \times \text{Offered Price}) - (\text{Freight} + \text{APMC Statutory Cess} + \text{Hamali/Labor} + \text{Storage} + \text{Weather Risk Buffer})$$
+$$\text{Net Return} = (\text{Quantity} \times \text{Offered Price}) - (\text{Freight} + \text{APMC Cess} + \text{Hamali/Labor} + \text{Storage} + \text{Weather Risk Buffer})$$
 
-All calculations are strictly deterministic Python arithmetic—zero LLM financial hallucinations or guesswork.
+> [!IMPORTANT]
+> All financial calculations are **strictly deterministic Python arithmetic**. There is zero LLM math, so no financial hallucinations and no guesswork.
+
+### ✨ Highlights
+
+| | Feature | What it does |
+| :-: | :--- | :--- |
+| 📊 | **Live mandi prices** | Official AGMARKNET daily wholesale modal prices from data.gov.in |
+| 🌦️ | **Transit weather risk** | Live Open-Meteo forecasts mapped to spoilage hazard ratings |
+| 🤝 | **Multi-buyer negotiation** | Two independent buyer agents bid, and the orchestrator ranks the options |
+| 🚚 | **Freight modelling** | Vehicle matching by quantity, distance routing, rain-cover surcharges |
+| 🃏 | **Interactive cards** | Carousel, Review, Confirmation and Payment cards inside ASI:One |
+| 🔐 | **Human approval gates** | Casual replies like "ok" never confirm a booking or a payment |
+| ⛓️ | **On-chain verification** | Advisory-fee settlement verified on the Fetch.ai Dorado testnet |
 
 ---
 
-## 2. Agentverse Agents and Addresses
+## 🏗️ Architecture
 
-The KrishiBazaar multi-agent network is registered and discoverable on Agentverse. Indian farmers converse with the main entry point via ASI:One or Agentverse Chat, while the orchestrator coordinates autonomously with domain-specialist and settlement agents:
+```mermaid
+flowchart LR
+    F([👨🌾 Farmer]) <-->|ACP V1 chat + cards| O
 
-| Agent Name | Agentverse Address / Handle |
+    subgraph AV[Agentverse Network]
+        O[🧠 KrishiBazaar Main<br/>Orchestrator]
+        O --> M[📊 Market Agent]
+        O --> W[🌦️ Weather Agent]
+        O --> BA[💼 Buyer Agent A]
+        O --> BB[🏢 Buyer Agent B]
+        O --> T[🚚 Transport Agent]
+        O -.->|optional advisory fee| P[💳 Payment Agent]
+    end
+
+    M --- D1[(data.gov.in<br/>AGMARKNET)]
+    W --- D2[(Open-Meteo)]
+    P --- D3[(Dorado Testnet)]
+```
+
+**Flow:** the farmer describes their produce in natural language → the orchestrator extracts structured parameters → specialists are queried in parallel → net return is computed deterministically per channel → ranked options are shown as interactive cards → nothing is booked until the farmer gives explicit approval.
+
+---
+
+## 🤖 Agentverse Agents
+
+The network is registered and discoverable on Agentverse. Farmers talk to the main entry point through **ASI:One** or **Agentverse Chat**; the orchestrator coordinates the specialists autonomously.
+
+| Agent | Agentverse Address / Handle |
 | :--- | :--- |
-| KrishiBazaar Main | `@krishibazaar-india` |
-| krishibazaar_market | `agent1q0rsn3us4d9twt209r2xefsqku4qvgypjtp8xvkjep4tmrvrsldnw4z5az4` |
-| krishibazaar_weather | `agent1qwzwhwgk3hft3z9qnaf2y7mdlwll2r23383fn6x0fhmj33lyuwuhqhq49rv` |
-| krishibazaar_buyer | `agent1qtgmthsczmt5uxchs9pz0033vrfm4mwhwl5lhqewz80qfggkjay659sn3fu` |
-| krishibazaar_transport | `agent1q0he7rn2yyh7lkswt37hdddfaf7vjcu4vtvyjd2npte07vw6dnygk7tjl8j` |
-| krishibazaar_buyer_b | `agent1qgw98k45pq6xp6vtj6sy4mrdmhjn206zaqs5f7ff6ghsj5rafs39sesvpzh` |
-| krishibazaar_payment_agent | `agent1qfw20k2rw8p68e04mzzul2sedcjgcfcryz29hh55xf3d9vz7f59tstejszf` |
+| 🧠 **KrishiBazaar Main** | `@krishibazaar-india` |
+| 📊 **krishibazaar_market** | `agent1q0rsn3us4d9twt209r2xefsqku4qvgypjtp8xvkjep4tmrvrsldnw4z5az4` |
+| 🌦️ **krishibazaar_weather** | `agent1qwzwhwgk3hft3z9qnaf2y7mdlwll2r23383fn6x0fhmj33lyuwuhqhq49rv` |
+| 💼 **krishibazaar_buyer** | `agent1qtgmthsczmt5uxchs9pz0033vrfm4mwhwl5lhqewz80qfggkjay659sn3fu` |
+| 🚚 **krishibazaar_transport** | `agent1q0he7rn2yyh7lkswt37hdddfaf7vjcu4vtvyjd2npte07vw6dnygk7tjl8j` |
+| 🏢 **krishibazaar_buyer_b** | `agent1qgw98k45pq6xp6vtj6sy4mrdmhjn206zaqs5f7ff6ghsj5rafs39sesvpzh` |
+| 💳 **krishibazaar_payment_agent** | `agent1qfw20k2rw8p68e04mzzul2sedcjgcfcryz29hh55xf3d9vz7f59tstejszf` |
 
-### Agent Roles & Responsibilities
+### Roles & Responsibilities
 
-- **KrishiBazaar Main (`@krishibazaar-india`):** The primary project entry point and farmer-facing conversational orchestrator. Handles natural-language farmer dialogue via Agent Chat Protocol (ACP V1) / ASI:One chat, extracts structured produce inquiry parameters (crop, quantity in quintals, origin location, deadline, minimum net return target), coordinates specialist agent queries, executes deterministic multi-channel net-return optimization, renders interactive UI cards (Carousel, Review, Confirmation, Payment Review), and enforces the mandatory explicit farmer approval safety gate.
-- **krishibazaar_market (`agent1q0rsn3us4d9twt209r2xefsqku4qvgypjtp8xvkjep4tmrvrsldnw4z5az4`):** Market Specialist Agent that queries the official Indian Open Government Data ([data.gov.in](https://data.gov.in) / AGMARKNET) daily mandi price dataset for target commodities and districts. Validates reported prices against clerical errors and unit mismatches (e.g. per-kg or per-bundle anomalies), reports transparent data provenance, and provides regional/state benchmarks when local district arrival records are unavailable.
-- **krishibazaar_weather (`agent1qwzwhwgk3hft3z9qnaf2y7mdlwll2r23383fn6x0fhmj33lyuwuhqhq49rv`):** Weather Specialist Agent that evaluates live atmospheric forecasts (precipitation probability, rain volume, and temperature extremes) along transit routes via the Open-Meteo REST API, calculating objective crop spoilage hazard ratings (`LOW`, `MEDIUM`, `HIGH`) and transit risk deductions.
-- **krishibazaar_buyer (`agent1qtgmthsczmt5uxchs9pz0033vrfm4mwhwl5lhqewz80qfggkjay659sn3fu`):** Buyer Specialist Agent A that generates structured, simulated benchmark procurement bids from regional aggregators, Farmer Producer Organizations (FPOs), and organized retail hubs for negotiation modeling.
-- **krishibazaar_transport (`agent1q0he7rn2yyh7lkswt37hdddfaf7vjcu4vtvyjd2npte07vw6dnygk7tjl8j`):** Transport Specialist Agent that estimates freight quotes, calculates transit distance between farmgate and delivery destinations, matches vehicle capacity (Tata Ace, 407, 17ft, 22ft container), and incorporates weather protection surcharges (e.g. tarpaulin coverage).
-- **krishibazaar_buyer_b (`agent1qgw98k45pq6xp6vtj6sy4mrdmhjn206zaqs5f7ff6ghsj5rafs39sesvpzh`):** Buyer Specialist Agent B that generates alternative simulated benchmark procurement offers from institutional buyers, corporate agribusinesses, and export commodity aggregators.
-- **krishibazaar_payment_agent (`agent1qfw20k2rw8p68e04mzzul2sedcjgcfcryz29hh55xf3d9vz7f59tstejszf`):** Payment Specialist Agent (role: seller/payee) implementing the official Fetch.ai Agent Payment Protocol (`payment_protocol_spec`). Handles advisory-fee payment reviews, enforces an explicit human authorization gate (`AUTHORIZE PAYMENT REF:...`), validates recipient/currency/amounts, and performs authoritative on-chain settlement verification on the Fetch.ai Dorado Testnet.
+<details>
+<summary><b>🧠 KrishiBazaar Main</b> — farmer-facing orchestrator</summary>
+
+<br>
+
+The primary project entry point. Handles natural-language farmer dialogue via Agent Chat Protocol (ACP V1) / ASI:One chat and:
+
+- extracts structured inquiry parameters (crop, quantity in quintals, origin, deadline, minimum net return target)
+- coordinates specialist queries
+- runs deterministic multi-channel net-return optimization
+- renders interactive UI cards (Carousel, Review, Confirmation, Payment Review)
+- enforces the mandatory explicit farmer approval gate
+
+</details>
+
+<details>
+<summary><b>📊 krishibazaar_market</b> — official mandi prices</summary>
+
+<br>
+
+Queries the official Indian Open Government Data ([data.gov.in](https://data.gov.in) / AGMARKNET) daily mandi price dataset for target commodities and districts. It validates prices against clerical errors and unit mismatches (e.g. per-kg or per-bundle anomalies), reports transparent data provenance, and provides regional/state benchmarks when local district arrival records are unavailable.
+
+</details>
+
+<details>
+<summary><b>🌦️ krishibazaar_weather</b> — transit spoilage risk</summary>
+
+<br>
+
+Evaluates live forecasts (precipitation probability, rain volume, temperature extremes) along transit routes via the Open-Meteo REST API. Produces objective spoilage hazard ratings (`LOW`, `MEDIUM`, `HIGH`) and transit risk deductions.
+
+</details>
+
+<details>
+<summary><b>💼 krishibazaar_buyer</b> — Buyer Specialist A</summary>
+
+<br>
+
+Generates structured, simulated benchmark procurement bids from regional aggregators, Farmer Producer Organizations (FPOs), and organized retail hubs for negotiation modelling.
+
+</details>
+
+<details>
+<summary><b>🏢 krishibazaar_buyer_b</b> — Buyer Specialist B</summary>
+
+<br>
+
+Generates alternative simulated benchmark offers from institutional buyers, corporate agribusinesses, and export commodity aggregators.
+
+</details>
+
+<details>
+<summary><b>🚚 krishibazaar_transport</b> — freight & logistics</summary>
+
+<br>
+
+Estimates freight quotes, calculates distance between farmgate and destination, matches vehicle capacity (Tata Ace, 407, 17ft, 22ft container), and includes weather protection surcharges (e.g. tarpaulin coverage).
+
+</details>
+
+<details>
+<summary><b>💳 krishibazaar_payment_agent</b> — advisory-fee settlement</summary>
+
+<br>
+
+Implements the official Fetch.ai Agent Payment Protocol (`payment_protocol_spec`) in the seller/payee role. It handles advisory-fee payment reviews, enforces an explicit human authorization gate (`AUTHORIZE PAYMENT REF:...`), validates recipient, currency and amounts, and performs authoritative on-chain settlement verification on the Fetch.ai Dorado Testnet.
+
+</details>
 
 ---
 
-## 3. Local Development Port Mapping
+## 🔌 Local Development Ports
 
-For local development, unit testing, and multi-process debugging, agents bind to the following local loopback ports on `127.0.0.1`:
+For local development, unit testing and multi-process debugging, agents bind to loopback ports on `127.0.0.1`:
 
-| Local Agent Process | Local Port | Protocol / Spec | Internal Data Source |
+| Local Agent Process | Port | Protocol / Spec | Internal Data Source |
 | :--- | :---: | :--- | :--- |
 | **Orchestrator** | `8000` | `AgentChatProtocol` (ACP V1) | ASI:One API (`asi1-mini`) + SQLite |
 | **Market Agent** | `8001` | `KrishiBazaarMarketProtocol` | [data.gov.in](https://data.gov.in) (AGMARKNET API) |
 | **Weather Agent** | `8002` | `KrishiBazaarWeatherProtocol` | [Open-Meteo REST API](https://open-meteo.com) |
-| **Buyer Agent A** | `8003` | `KrishiBazaarBuyerProtocol` | Simulated Institutional Benchmarks |
-| **Transport Agent** | `8004` | `KrishiBazaarTransportProtocol` | Simulated Fleet Logistics Models |
-| **Buyer Agent B** | `8005` | `KrishiBazaarBuyerBProtocol` | Simulated Corporate Benchmarks |
+| **Buyer Agent A** | `8003` | `KrishiBazaarBuyerProtocol` | Simulated institutional benchmarks |
+| **Transport Agent** | `8004` | `KrishiBazaarTransportProtocol` | Simulated fleet logistics models |
+| **Buyer Agent B** | `8005` | `KrishiBazaarBuyerBProtocol` | Simulated corporate benchmarks |
 | **Payment Agent** | `8006` | `payment_protocol_spec` (seller/payee) | Fetch.ai Dorado Testnet (`dorado-1`) |
 
-> **Important Distinction:** Local development ports (`8000`–`8006`) are strictly for local loopback testing on `127.0.0.1`. They are not public endpoints. In deployed or hosted Agentverse mode, agents communicate across the network via Agentverse mailboxes and decentralized uAgents protocols.
+> [!NOTE]
+> Ports `8000`–`8006` are strictly for local loopback testing and are **not public endpoints**. In deployed mode, agents communicate through Agentverse mailboxes and decentralized uAgents protocols.
 
 ---
 
-## 4. Data Provenance, Demo Disclaimers & Safety Model
-
-KrishiBazaar strictly separates verified real-world data from benchmark simulations, regulatory assumptions, and testnet payment operations:
-
-* **Official Live Mandi Data (`data.gov.in`)**: Official AGMARKNET daily wholesale modal prices. Never fabricated. When zero arrival records exist for a district, regional state-level benchmarks are presented with an explicit provenance notice and are never misrepresented as local quotes.
-* **Live Transit Weather (`Open-Meteo`)**: Live atmospheric forecasts mapped to the requested transit date. Includes spoilage hazard ratings (`LOW`, `MEDIUM`, `HIGH`).
-* **Simulated Buyer Bids**: All commercial buyer bids are simulated benchmark models for negotiation comparison (`is_simulated=True`). No real commercial buyer bid or trade contract exists without verified offline execution.
-* **Simulated Freight Logistics**: Quotes vehicle sizes matching quantity (e.g. 50 quintals &rarr; Tata 407) with dynamic distance routing and rain-protection tarpaulin coverage.
-* **Assumed Statutory Deductions (Unverified Assumptions)**: Standard APMC market cess (1.5%) and labor/hamali (INR 25/qtl). Direct buyer trade options assume an APMC statutory exemption outside market yards; this is an explicitly disclosed, unverified operational assumption and is not represented as legally confirmed advice.
-* **Simulated Produce Bookings**: All booking records generated upon farmer approval are strictly marked `is_simulated_booking=True`. No physical crop sale, commercial contract, or carrier dispatch occurs.
-* **Advisory-Fee Payment Demo vs. Real Crop Proceeds**: The optional 0.05 FET advisory-fee payment flow operates on the Fetch.ai Dorado testnet (`dorado-1`) using test tokens (`atestfet`). It is strictly an advisory service fee demonstration and is completely separate from any fiat crop sale proceeds.
-* **Strict Human Approval Gates**:
-  1. *Booking Gate*: Casual affirmations (`"ok"`, `"sounds good"`) are blocked from confirming proposals. Explicit confirmation (`"Confirm booking"`, `"Approve proposal PROP-..."`) is mandatory.
-  2. *Payment Gate*: Exact structured authorization (`AUTHORIZE PAYMENT REF:... AMOUNT:... CURRENCY:... RECIPIENT:...`) is mandatory before any transaction is broadcast.
-* **Credential & Environment Security**: Users must configure required environment variables locally via `.env` (using `.env.example` as a template). Never commit private keys, wallet seed phrases, API keys, or secret credentials to version control.
-
----
-
-## 5. Setup & Installation (Windows PowerShell)
+## 🚀 Quick Start
 
 ### Prerequisites
-- **Python 3.13** or **Python 3.14** (virtual environment `.venv313` or `.venv`)
-- **Git**
 
-### Step 1: Clone & Navigate
+- **Python 3.13** or **3.14**
+- **Git**
+- Windows PowerShell (commands below are PowerShell-specific)
+
+### 1. Clone
+
 ```powershell
 git clone https://github.com/your-org/KrishiBazaar.git
 cd KrishiBazaar
 ```
 
-### Step 2: Create & Activate Virtual Environment (`.venv313`)
-```powershell
-# Create virtual environment with Python 3.13
-py -3.13 -m venv .venv313
+### 2. Create and activate a virtual environment
 
-# Activate virtual environment in PowerShell
+```powershell
+py -3.13 -m venv .venv313
 .\.venv313\Scripts\Activate.ps1
 ```
 
-### Step 3: Install Dependencies
+### 3. Install dependencies
+
 ```powershell
 python -m pip install --upgrade pip
 pip install -r requirements.txt
 pip install -e .
 ```
 
-### Step 4: Configure Environment Variables
+### 4. Configure environment
+
 ```powershell
-# Copy safe configuration template
 Copy-Item .env.example .env
 ```
-Open `.env` and verify the settings. Safe local defaults and deterministic seeds are provided. Never commit private credentials or seeds to public version control.
 
----
+Open `.env` and review the settings. Safe local defaults and deterministic seeds are provided.
 
-## 6. Agent Startup Order (Windows PowerShell)
+> [!WARNING]
+> Never commit private keys, wallet seed phrases, API keys, or any secret credentials to version control.
 
-For live multi-process agent messaging, launch the specialist agents first, followed by the Payment Specialist and the Orchestrator. Open **seven separate PowerShell tabs**:
+### 5. Start the agents
+
+Launch the specialists first, then the Payment agent, then the Orchestrator. Use **seven separate PowerShell tabs**:
+
+| Tab | Agent | Port | Command |
+| :-: | :--- | :-: | :--- |
+| 1 | Market | `8001` | `python .\src\krishibazaar\agents\market_agent.py` |
+| 2 | Weather | `8002` | `python .\src\krishibazaar\agents\weather_agent.py` |
+| 3 | Buyer A | `8003` | `python .\src\krishibazaar\agents\buyer_agent.py` |
+| 4 | Transport | `8004` | `python .\src\krishibazaar\agents\transport_agent.py` |
+| 5 | Buyer B | `8005` | `python .\src\krishibazaar\agents\buyer_b_agent.py` |
+| 6 | Payment | `8006` | `python .\src\krishibazaar\agents\payment_agent.py` |
+| 7 | **Orchestrator** | `8000` | `python .\src\krishibazaar\agents\orchestrator.py` |
+
+In every tab, activate the environment first:
 
 ```powershell
-# Tab 1: Market Specialist (Port 8001)
 .\.venv313\Scripts\Activate.ps1
-python .\src\krishibazaar\agents\market_agent.py
-
-# Tab 2: Weather Specialist (Port 8002)
-.\.venv313\Scripts\Activate.ps1
-python .\src\krishibazaar\agents\weather_agent.py
-
-# Tab 3: Buyer A Specialist (Port 8003)
-.\.venv313\Scripts\Activate.ps1
-python .\src\krishibazaar\agents\buyer_agent.py
-
-# Tab 4: Transport Specialist (Port 8004)
-.\.venv313\Scripts\Activate.ps1
-python .\src\krishibazaar\agents\transport_agent.py
-
-# Tab 5: Buyer B Specialist (Port 8005)
-.\.venv313\Scripts\Activate.ps1
-python .\src\krishibazaar\agents\buyer_b_agent.py
-
-# Tab 6: Payment & Settlement Specialist (Port 8006)
-.\.venv313\Scripts\Activate.ps1
-python .\src\krishibazaar\agents\payment_agent.py
-
-# Tab 7: Orchestrator Agent (Port 8000)
-.\.venv313\Scripts\Activate.ps1
-python .\src\krishibazaar\agents\orchestrator.py
 ```
 
-Each agent displays a startup banner with its local endpoint, address, and protocol bindings.
+Each agent prints a startup banner with its local endpoint, address, and protocol bindings.
 
 ---
 
-## 7. Demo & Smoke Testing
+## 🎬 Demo Walkthrough
 
-### Automated Demo Smoke Test
-To verify configured ports, check all specialist HTTP connections, and test the negotiation pipeline without creating bookings:
+### Smoke test
+
+Verify ports, specialist connections and pipeline math without creating bookings:
 
 ```powershell
-# Full live smoke test (checks ports + live specialist queries + pipeline math)
+# Full live test: ports + live specialist queries + pipeline math
 .\.venv313\Scripts\python.exe smoke_test.py
 
-# Quick socket verification only (ports 8000-8006)
+# Quick socket check only (ports 8000-8006)
 .\.venv313\Scripts\python.exe smoke_test.py --ports-only
 
-# In-memory pipeline verification (runs without active background agents)
+# In-memory pipeline check, no background agents required
 .\.venv313\Scripts\python.exe smoke_test.py --offline
 ```
 
-### Interactive Dialogue Walkthrough
+### Interactive dialogue
 
-1. **Farmer Submits Produce Inquiry**:
-   > *"I have 50 quintals of onions in Nashik, and I want at least INR 85000 net by tomorrow."*
-   * Orchestrator queries Market, Weather, Buyer A, Buyer B, and Transport over HTTP.
-   * Renders interactive **Ranked Selling Channels CarouselCard** with transparent provenance and itemized deductions.
+```mermaid
+sequenceDiagram
+    participant F as 👨🌾 Farmer
+    participant O as 🧠 Orchestrator
+    participant S as 📊 Specialists
+    participant P as 💳 Payment Agent
 
-2. **Farmer Selects an Option**:
-   > *"Select option 1"* (or clicks **Select Rank #1** CTA)
-   * Orchestrator generates a **ReviewCard** with Proposal Reference (e.g. `PROP-20261021-XXXXXX`).
-   * Displays itemized Freight, APMC Cess, Hamali/Labor, Weather Risk Loss, and Net Return.
-   * Sets safety status: `AWAITING EXPLICIT FARMER APPROVAL` (valid for 15 minutes).
+    F->>O: 50 quintals of onions in Nashik, min INR 85000 net
+    O->>S: Query market, weather, buyers A/B, transport
+    S-->>O: Prices, risk, bids, freight
+    O-->>F: Ranked Selling Channels (Carousel)
+    F->>O: Select option 1
+    O-->>F: ReviewCard (PROP-...) awaiting approval
+    F->>O: "ok"
+    O-->>F: Gate active: explicit approval required
+    F->>O: Approve proposal PROP-...
+    O-->>F: Booking Confirmation (simulated)
+    F->>O: Pay advisory fee
+    O->>P: Create payment review
+    P-->>F: AUTHORIZE PAYMENT REF:... command
+```
 
-3. **Casual Acknowledgment Does NOT Confirm Booking**:
-   > *"ok"* or *"sounds good"*
-   * Safety gate activates: Orchestrator explains explicit approval is required and redisplays the existing proposal ReviewCard without creating a booking or re-asking for crop details.
+<details open>
+<summary><b>Step-by-step</b></summary>
 
-4. **Explicit Approval Confirms Simulated Booking**:
-   > *"Approve proposal PROP-20261021-XXXXXX"* (or clicks **Approve & Generate Booking** CTA)
-   * Validates proposal ID and expiration.
-   * Atomically records confirmation audit record in SQLite (`krishibazaar.db`).
-   * Displays **Booking Confirmation Card** (`is_simulated_booking=True`). Duplicate approvals are strictly blocked.
+<br>
 
-5. **Optional Advisory-Fee Payment Review**:
-   > *"Pay advisory fee"* (or clicks **Proceed to Payment Review** CTA)
-   * Generates a **Payment Review DetailCard** for 0.05 FET on Dorado testnet with exact command template:
-     `AUTHORIZE PAYMENT REF:KB-PAY-... AMOUNT:50000000000000000 CURRENCY:atestfet RECIPIENT:fetch1n09y85ndck56dmxrud7xpkmal0qqtqsej36u0h`
-   * Human gate executes transaction broadcast, validates Dorado ledger block height, verifies transferred funds, and records settlement with actual gas fee.
+**1️⃣ Farmer submits a produce inquiry**
+
+> *"I have 50 quintals of onions in Nashik, and I want at least INR 85000 net by tomorrow."*
+
+The orchestrator queries Market, Weather, Buyer A, Buyer B and Transport over HTTP, then renders a **Ranked Selling Channels CarouselCard** with provenance and itemized deductions.
+
+**2️⃣ Farmer selects an option**
+
+> *"Select option 1"* (or click the **Select Rank #1** CTA)
+
+A **ReviewCard** is generated with a Proposal Reference (e.g. `PROP-20261021-XXXXXX`), itemizing Freight, APMC Cess, Hamali/Labor, Weather Risk Loss and Net Return. Status: `AWAITING EXPLICIT FARMER APPROVAL` (valid for 15 minutes).
+
+**3️⃣ Casual acknowledgment does NOT confirm**
+
+> *"ok"* or *"sounds good"*
+
+The safety gate activates. The orchestrator explains that explicit approval is required and redisplays the existing proposal, without creating a booking or re-asking for crop details.
+
+**4️⃣ Explicit approval confirms a simulated booking**
+
+> *"Approve proposal PROP-20261021-XXXXXX"* (or click **Approve & Generate Booking**)
+
+The proposal ID and expiry are validated, a confirmation audit record is written atomically to SQLite (`krishibazaar.db`), and a **Booking Confirmation Card** is shown (`is_simulated_booking=True`). Duplicate approvals are blocked.
+
+**5️⃣ Optional advisory-fee payment**
+
+> *"Pay advisory fee"* (or click **Proceed to Payment Review**)
+
+A **Payment Review DetailCard** is generated for 0.05 FET on Dorado testnet, with an exact command template:
+
+```text
+AUTHORIZE PAYMENT REF:KB-PAY-... AMOUNT:50000000000000000 CURRENCY:atestfet RECIPIENT:fetch1n09y85ndck56dmxrud7xpkmal0qqtqsej36u0h
+```
+
+The human gate executes the broadcast, validates the Dorado ledger block height, verifies transferred funds, and records settlement with the actual gas fee.
+
+</details>
 
 ---
 
-## 8. Troubleshooting Guide (Windows PowerShell)
+## 🛡️ Data Provenance & Safety Model
 
-| Observed Output | Cause | Recommended Action |
-| :--- | :--- | :--- |
-| `ERROR: Failed to retrieve messages: 401` | Background Agentverse mailbox token requires refresh. | **No action needed for local demos.** Direct inter-agent HTTP messaging runs independently on local ports 8000–8006. |
-| `WARNING: I do not have enough funds to register on Almanac contract` | Agent has no mainnet FET tokens for smart contract registration. | **No action needed.** Almanac REST API registration succeeds automatically. Contract writes are optional. |
-| `UnicodeEncodeError: 'charmap' codec can't encode characters` | Windows PowerShell default console encoding is CP1252. | Run `chcp 65001` or set `$OutputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding` before running scripts. |
-| `Port already in use` (8000–8006) | Another agent process is already bound to the port. | Run `Get-NetTCPConnection -State Listen \| Where-Object { $_.LocalPort -ge 8000 -and $_.LocalPort -le 8006 }` and terminate the orphaned process with `Stop-Process -Id <PID>`. |
-| `specialist query timed out` | Upstream network latency on data.gov.in or slow response. | The Orchestrator automatically falls back to verified regional benchmark data and displays transparent provenance disclaimers. |
+KrishiBazaar strictly separates verified real-world data from simulations, regulatory assumptions and testnet payments.
+
+| Category | Status | Details |
+| :--- | :-: | :--- |
+| **Mandi prices** (`data.gov.in`) | ✅ Real | Official AGMARKNET daily wholesale modal prices. Never fabricated. With zero district arrivals, regional state-level benchmarks are shown with an explicit provenance notice and never passed off as local quotes. |
+| **Transit weather** (`Open-Meteo`) | ✅ Real | Live forecasts mapped to the transit date, with `LOW` / `MEDIUM` / `HIGH` spoilage ratings. |
+| **Buyer bids** | 🧪 Simulated | Benchmark models for negotiation comparison (`is_simulated=True`). No real buyer bid or trade contract exists without verified offline execution. |
+| **Freight logistics** | 🧪 Simulated | Vehicle sizing by quantity (e.g. 50 quintals → Tata 407), dynamic distance routing, rain-cover surcharge. |
+| **APMC cess (1.5%) & hamali (INR 25/qtl)** | ⚠️ Assumed | Unverified assumptions. Direct buyer trades assume an APMC exemption outside market yards; this is disclosed and **not** legally confirmed advice. |
+| **Bookings** | 🧪 Simulated | Marked `is_simulated_booking=True`. No physical sale, contract or carrier dispatch occurs. |
+| **Advisory-fee payment** | 🧪 Testnet | 0.05 FET on Dorado (`dorado-1`) using `atestfet`. A service-fee demo, completely separate from any fiat crop proceeds. |
+
+### 🔐 Human approval gates
+
+1. **Booking gate:** casual affirmations (`"ok"`, `"sounds good"`) are blocked. Explicit confirmation (`"Confirm booking"`, `"Approve proposal PROP-..."`) is mandatory.
+2. **Payment gate:** the exact structured authorization (`AUTHORIZE PAYMENT REF:... AMOUNT:... CURRENCY:... RECIPIENT:...`) is mandatory before any transaction is broadcast.
+
+### 🔑 Credential security
+
+Configure secrets locally via `.env` (use `.env.example` as the template). Never commit private keys, seed phrases, API keys or other credentials.
 
 ---
 
-## 9. Automated Test Suite
-
-Run the complete test suite:
+## 🧪 Testing
 
 ```powershell
 # Run all 403 regression and integration tests
 .\.venv313\Scripts\python.exe -m pytest -v
 ```
 
-The test suite covers:
-- **Financial & Deduction Arithmetic**: Deterministic gross value, itemized deductions, net return, per-quintal rates, and target threshold consistency.
-- **Provenance & Unverified Fee Disclosures**: APMC cess and hamali unverified assumption disclosures, zero-record notices, and regional benchmark distinction.
-- **Card Protocol Tests**: Carousel, Detail, Review, and Form card generation with CTA payload validation.
-- **Approval Safety Gate Tests**: Casual acknowledgement blocking, ID mismatch rejection, expiry enforcement, cancellation, and duplicate approval prevention.
-- **Multi-Process HTTP Integration Tests**: Live HTTP request-response validation across specialist agents on ports 8001–8006.
-- **Payment Protocol Invariants**: Preflight address validation, recipient whitelisting, exact base units, gas preflight, and uncertain settlement holding state.
+| Test area | Coverage |
+| :--- | :--- |
+| **Financial arithmetic** | Gross value, itemized deductions, net return, per-quintal rates, target threshold consistency |
+| **Provenance & disclosures** | APMC/hamali unverified-assumption notices, zero-record notices, regional benchmark distinction |
+| **Card protocol** | Carousel, Detail, Review and Form card generation with CTA payload validation |
+| **Approval safety gates** | Casual-ack blocking, ID mismatch rejection, expiry enforcement, cancellation, duplicate prevention |
+| **Multi-process HTTP integration** | Live request/response validation across specialists on ports 8001–8006 |
+| **Payment invariants** | Address preflight, recipient whitelisting, exact base units, gas preflight, uncertain-settlement holding state |
 
 ---
 
-## 10. Hackathon Demo Compliance & Safety
+## 🩺 Troubleshooting
 
-* **No LLM Math**: All net returns and deductions are calculated using pure deterministic Python business logic.
-* **Full Provenance Transparency**: Benchmark buyer offers, simulated freight quotes, and statutory cess assumptions are clearly labeled with unverified status where applicable.
-* **Strict Safety Gate**: Zero real commercial crop sales, buyer contracts, or carrier dispatches are initiated. All bookings are explicitly simulated.
-* **Credential Protection**: Zero private seeds, API tokens, or secrets in source code, logs, or documentation.
-* **Testnet Micro-Fee Isolation**: Advisory-fee payment operates strictly on Fetch.ai Dorado testnet with explicit authorization and is completely isolated from crop proceeds.
+| Observed output | Cause | Recommended action |
+| :--- | :--- | :--- |
+| `ERROR: Failed to retrieve messages: 401` | Background Agentverse mailbox token needs refresh. | **No action needed for local demos.** Direct inter-agent HTTP messaging runs independently on ports 8000–8006. |
+| `WARNING: I do not have enough funds to register on Almanac contract` | Agent has no mainnet FET for contract registration. | **No action needed.** Almanac REST registration succeeds automatically; contract writes are optional. |
+| `UnicodeEncodeError: 'charmap' codec can't encode characters` | PowerShell console defaults to CP1252. | Run `chcp 65001`, or set `$OutputEncoding = [Console]::OutputEncoding = New-Object System.Text.UTF8Encoding` first. |
+| `Port already in use` (8000–8006) | Another process is bound to the port. | Find it with the command below, then `Stop-Process -Id <PID>`. |
+| `specialist query timed out` | Upstream latency on data.gov.in. | The orchestrator falls back to verified regional benchmarks and shows a provenance disclaimer. |
+
+```powershell
+Get-NetTCPConnection -State Listen | Where-Object { $_.LocalPort -ge 8000 -and $_.LocalPort -le 8006 }
+```
+
+---
+
+## ✅ Hackathon Compliance Checklist
+
+- [x] **No LLM math:** all returns and deductions come from deterministic Python business logic
+- [x] **Full provenance transparency:** simulated bids, freight quotes and statutory assumptions are labelled
+- [x] **Strict safety gates:** no real crop sale, buyer contract or carrier dispatch is ever initiated
+- [x] **Credential protection:** no private seeds, tokens or secrets in source, logs or docs
+- [x] **Testnet fee isolation:** advisory payment runs on Dorado only, with explicit authorization, fully isolated from crop proceeds
+
+---
+
+<div align="center">
+
+**Built with ❤️ for Indian farmers on the Fetch.ai ecosystem**
+
+🌾 *Fair price. Full transparency. Farmer in control.* 🌾
+
+</div>
